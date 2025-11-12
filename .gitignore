@@ -1,0 +1,50 @@
+# 更新 .gitignore 文件，确保包含所有编译文件
+@echo off
+(
+echo # 编译生成文件
+echo build/
+echo dist/
+echo *.spec
+echo *.exe
+echo.
+echo # Python 缓存文件
+echo __pycache__/
+echo *.pyc
+echo *.pyo
+echo *.pyd
+echo.
+echo # 日志文件
+echo *.log
+echo autoclicker_log.txt
+echo click_log.txt
+echo build.log
+echo.
+echo # 配置文件
+echo click_points.json
+echo.
+echo # 系统文件
+echo .DS_Store
+echo Thumbs.db
+echo.
+echo # IDE 文件
+echo .vscode/
+echo .idea/
+echo *.swp
+echo *.swo
+echo.
+echo # 临时文件
+echo temp/
+echo tmp/
+echo.
+echo # 备份文件
+echo *.bak
+echo *.*~
+echo.
+echo # 测试文件
+echo test_*
+) > .gitignore
+
+# 添加并提交 .gitignore 更新
+git add .gitignore
+git commit -m "更新.gitignore，排除所有编译文件"
+git push origin main

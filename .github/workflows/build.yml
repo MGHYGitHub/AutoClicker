@@ -30,46 +30,34 @@ jobs:
         pip install pyautogui pystray Pillow keyboard requests pyinstaller
         
     - name: Create build info file
+      shell: cmd
       run: |
-        echo "Build Date: ${{ github.event.head_commit.timestamp }}" > build_info.txt
+        echo "Build Date: %date% %time%" > build_info.txt
         echo "Commit: ${{ github.sha }}" >> build_info.txt
         echo "Python Version: ${{ matrix.python-version }}" >> build_info.txt
         echo "OS: ${{ matrix.os }}" >> build_info.txt
         
     - name: Build AutoClicker (Single File)
+      shell: cmd
       run: |
-        pyinstaller --onefile --windowed --noconfirm --clean ^
-          --name "AutoClicker_v2.3_${{ matrix.python-version }}_Windows" ^
-          --hidden-import=pystray._win32 ^
-          --hidden-import=PIL._imaging ^
-          --hidden-import=PIL._imagingft ^
-          --hidden-import=keyboard._winkeyboard ^
-          --hidden-import=keyboard._nixkeyboard ^
-          --add-data "build_info.txt;." ^
-          autoclicker.py
+        pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.3_${{ matrix.python-version }}_Windows" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
           
     - name: Build AutoClicker (Console Version)
+      shell: cmd
       run: |
-        pyinstaller --onefile --console --noconfirm --clean ^
-          --name "AutoClicker_v2.3_${{ matrix.python-version }}_Console" ^
-          --hidden-import=pystray._win32 ^
-          --hidden-import=PIL._imaging ^
-          --hidden-import=PIL._imagingft ^
-          --hidden-import=keyboard._winkeyboard ^
-          --hidden-import=keyboard._nixkeyboard ^
-          --add-data "build_info.txt;." ^
-          autoclicker.py
+        pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.3_${{ matrix.python-version }}_Console" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
           
     - name: Create release assets
+      shell: cmd
       run: |
         mkdir release_assets
         copy dist\*.exe release_assets\
         echo "AutoClicker v2.3" > release_assets\README.txt
         echo "================" >> release_assets\README.txt
-        echo "" >> release_assets\README.txt
+        echo. >> release_assets\README.txt
         echo "Build Info:" >> release_assets\README.txt
         type build_info.txt >> release_assets\README.txt
-        echo "" >> release_assets\README.txt
+        echo. >> release_assets\README.txt
         echo "Usage:" >> release_assets\README.txt
         echo "- F2: Capture coordinates" >> release_assets\README.txt
         echo "- F3: Start/Stop task" >> release_assets\README.txt
