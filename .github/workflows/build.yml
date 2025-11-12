@@ -1,0 +1,104 @@
+name: Build AutoClicker
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyautogui pystray Pillow keyboard requests pyinstaller
+        
+    - name: Create build info file
+      run: |
+        echo "Build Date: ${{ github.event.head_commit.timestamp }}" > build_info.txt
+        echo "Commit: ${{ github.sha }}" >> build_info.txt
+        echo "Python Version: ${{ matrix.python-version }}" >> build_info.txt
+        echo "OS: ${{ matrix.os }}" >> build_info.txt
+        
+    - name: Build AutoClicker (Single File)
+      run: |
+        pyinstaller --onefile --windowed --noconfirm --clean ^
+          --name "AutoClicker_v2.3_${{ matrix.python-version }}_Windows" ^
+          --hidden-import=pystray._win32 ^
+          --hidden-import=PIL._imaging ^
+          --hidden-import=PIL._imagingft ^
+          --hidden-import=keyboard._winkeyboard ^
+          --hidden-import=keyboard._nixkeyboard ^
+          --add-data "build_info.txt;." ^
+          autoclicker.py
+          
+    - name: Build AutoClicker (Console Version)
+      run: |
+        pyinstaller --onefile --console --noconfirm --clean ^
+          --name "AutoClicker_v2.3_${{ matrix.python-version }}_Console" ^
+          --hidden-import=pystray._win32 ^
+          --hidden-import=PIL._imaging ^
+          --hidden-import=PIL._imagingft ^
+          --hidden-import=keyboard._winkeyboard ^
+          --hidden-import=keyboard._nixkeyboard ^
+          --add-data "build_info.txt;." ^
+          autoclicker.py
+          
+    - name: Create release assets
+      run: |
+        mkdir release_assets
+        copy dist\*.exe release_assets\
+        echo "AutoClicker v2.3" > release_assets\README.txt
+        echo "================" >> release_assets\README.txt
+        echo "" >> release_assets\README.txt
+        echo "Build Info:" >> release_assets\README.txt
+        type build_info.txt >> release_assets\README.txt
+        echo "" >> release_assets\README.txt
+        echo "Usage:" >> release_assets\README.txt
+        echo "- F2: Capture coordinates" >> release_assets\README.txt
+        echo "- F3: Start/Stop task" >> release_assets\README.txt
+        echo "- F4: Pause/Resume task" >> release_assets\README.txt
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: AutoClicker-${{ matrix.python-version }}-${{ matrix.os }}
+        path: |
+          release_assets/
+          dist/
+        retention-days: 30
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release_assets/*
+        body: |
+          AutoClicker v2.3 Release
+          
+          ### Features:
+          - Multi-point auto clicking
+          - Global hotkeys support
+          - System tray integration
+          - Safety detection
+          
+          ### Build Information:
+          - Python: ${{ matrix.python-version }}
+          - OS: ${{ matrix.os }}
+          - Commit: ${{ github.sha }}
