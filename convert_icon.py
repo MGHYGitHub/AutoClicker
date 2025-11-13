@@ -1,32 +1,27 @@
 from PIL import Image
 import os
+import sys
 
-def create_multi_size_ico():
-    """从多个PNG文件创建多尺寸ICO"""
-    sizes = [16, 32, 48, 64, 128]
-    icon_images = []
-    
-    for size in sizes:
-        png_file = f"icon_{size}.png"
-        if os.path.exists(png_file):
-            img = Image.open(png_file)
-            if img.size != (size, size):
-                img = img.resize((size, size), Image.Resampling.LANCZOS)
-            icon_images.append(img)
-            print(f"添加 {size}x{size} 图标")
-        else:
-            print(f"警告: 找不到 {png_file}")
-    
-    if icon_images:
+def main():
+    if os.path.exists('icon.png'):
+        print("Converting icon.png to icon.ico...")
+        sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128)]
+        img = Image.open('icon.png')
+        icon_images = []
+        
+        for size in sizes:
+            resized_img = img.resize(size, Image.Resampling.LANCZOS)
+            icon_images.append(resized_img)
+        
         icon_images[0].save(
-            "icon.ico",
+            'icon.ico',
             format='ICO',
-            sizes=[img.size for img in icon_images],
+            sizes=[(img.width, img.height) for img in icon_images],
             append_images=icon_images[1:]
         )
-        print("成功创建多尺寸ICO文件: icon.ico")
+        print("✅ Created icon.ico from icon.png")
     else:
-        print("错误: 未找到任何图标文件")
+        print("⚠️ No icon.png found, building without custom icon")
 
 if __name__ == "__main__":
-    create_multi_size_ico()
+    main()

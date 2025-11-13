@@ -11,9 +11,10 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest]
-        python-version: ['3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.9', '3.10', '3.11']  # 移除了 3.8 避免安装问题
     
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30  # 增加超时时间
     
     steps:
     - name: Checkout code
@@ -23,11 +24,12 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip'  # 启用 pip 缓存
         
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyautogui pystray Pillow keyboard requests pyinstaller
+        pip install pyautogui pystray Pillow keyboard requests pyinstaller --timeout 60 --retries 3
         
     - name: Create build info file
       shell: cmd
@@ -38,52 +40,53 @@ jobs:
         echo "OS: ${{ matrix.os }}" >> build_info.txt
         
     - name: Convert PNG to ICO (if icon.png exists)
-      shell: cmd
+      shell: pwsh  # 使用 PowerShell 而不是 CMD
       run: |
-        python -c "
-        from PIL import Image
-        import os
-        
-        if os.path.exists('icon.png'):
-            sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128)]
-            img = Image.open('icon.png')
-            icon_images = []
-            
-            for size in sizes:
-                resized_img = img.resize(size, Image.Resampling.LANCZOS)
-                icon_images.append(resized_img)
-            
-            icon_images[0].save(
-                'icon.ico',
-                format='ICO',
-                sizes=[(img.width, img.height) for img in icon_images],
-                append_images=icon_images[1:]
-            )
-            print('✅ Created icon.ico from icon.png')
-        else:
-            print('⚠️ No icon.png found, building without custom icon')
-        "
+        if (Test-Path "icon.png") {
+          python -c "
+          from PIL import Image
+          import os
+          
+          sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128)]
+          img = Image.open('icon.png')
+          icon_images = []
+          
+          for size in sizes:
+              resized_img = img.resize(size, Image.Resampling.LANCZOS)
+              icon_images.append(resized_img)
+          
+          icon_images[0].save(
+              'icon.ico',
+              format='ICO',
+              sizes=[(img.width, img.height) for img in icon_images],
+              append_images=icon_images[1:]
+          )
+          print('✅ Created icon.ico from icon.png')
+          "
+        } else {
+          Write-Host "⚠️ No icon.png found, building without custom icon"
+        }
         
     - name: Build AutoClicker (Single File)
       shell: cmd
       run: |
         if exist "icon.ico" (
-          echo "Building with custom icon..."
-          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_${{ matrix.python-version }}_Windows" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          echo Building with custom icon...
+          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Windows" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
         ) else (
-          echo "Building without custom icon..."
-          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_${{ matrix.python-version }}_Windows" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          echo Building without custom icon...
+          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Windows" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
         )
           
     - name: Build AutoClicker (Console Version)
       shell: cmd
       run: |
         if exist "icon.ico" (
-          echo "Building with custom icon..."
-          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_${{ matrix.python-version }}_Console" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          echo Building with custom icon...
+          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Console" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
         ) else (
-          echo "Building without custom icon..."
-          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_${{ matrix.python-version }}_Console" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          echo Building without custom icon...
+          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Console" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
         )
           
     - name: Create release assets
