@@ -1,0 +1,65 @@
+[
+  {
+    "x": 164,
+    "y": 11,
+    "name": "点位1(164,11)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 1625,
+    "y": 18,
+    "name": "点位2(1625,18)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 76,
+    "y": 909,
+    "name": "点位3(76,909)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 1841,
+    "y": 915,
+    "name": "点位4(1841,915)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 503,
+    "y": 618,
+    "name": "点位5(503,618)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 1733,
+    "y": 731,
+    "name": "点位6(1733,731)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  },
+  {
+    "x": 867,
+    "y": 641,
+    "name": "点位7(867,641)",
+    "button": "left",
+    "delay": 0.1,
+    "click_count": 1,
+    "click_interval": 0.1
+  }
+]

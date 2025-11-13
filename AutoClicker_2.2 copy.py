@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AutoClicker 2.2 - 单文件完整版（tkinter + pystray）
+AutoClicker 2.3 - 单文件完整版（tkinter + pystray）
 功能清单（精简）：
 - 多点位管理：添加/删除/编辑/上下移动/重命名
 - 每点独立设置：X,Y,名称,点击键(左/右),点内延时(秒)
@@ -68,7 +68,7 @@ except Exception:
 CONFIG_FILE = "click_points.json"
 LOG_FILE = "autoclicker_log.txt"
 CLICK_REPORT = "click_log.txt"
-VERSION = "2.2"
+VERSION = "2.3"
 # If you have a URL to check updates, set it here.
 # For safety, by default it's empty; update_check won't run if empty.
 UPDATE_CHECK_URL = ""  # e.g. "https://example.com/autoclicker/version.json"
@@ -102,8 +102,8 @@ class AutoClickerApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"高级自动连点器 {VERSION}")
-        self.root.geometry("980x680")
-        self.root.minsize(900, 540)
+        self.root.geometry("1000x700")
+        self.root.minsize(950, 600)
         # 添加这个设置变量
         self.show_confirmation_var = tk.BooleanVar(value=True)  # 默认显示确认窗口
         # 添加调试模式设置
@@ -231,139 +231,195 @@ class AutoClickerApp:
         coord_frame = tk.LabelFrame(parent, text="坐标获取 & 点位管理", padx=8, pady=8)
         coord_frame.pack(fill=tk.BOTH, expand=False, padx=8, pady=8)
 
-        instr = tk.Label(coord_frame, text="点击“开始捕获”后移动到目标位置，按 F2 记录坐标（支持全局）。双击列表项可编辑。")
+        instr = tk.Label(coord_frame, text="点击“开始捕获”后移动到目标位置，按 F2 记录坐标（支持全局）。双击列表项可编辑。", 
+                        wraplength=600)
         instr.pack(fill=tk.X, pady=(0,6))
 
-        # Mouse button combobox (defaults but per-point overrides allowed)
-        mb_frame = tk.Frame(coord_frame)
-        mb_frame.pack(fill=tk.X, pady=4)
+        # 鼠标键设置和捕获按钮放在同一行
+        top_row = tk.Frame(coord_frame)
+        top_row.pack(fill=tk.X, pady=4)
+        
+        # 鼠标键设置
+        mb_frame = tk.Frame(top_row)
+        mb_frame.pack(side=tk.LEFT)
         tk.Label(mb_frame, text="默认鼠标键:").pack(side=tk.LEFT)
         self.default_button_var = tk.StringVar(value="left")
-        mb_combo = ttk.Combobox(mb_frame, textvariable=self.default_button_var, values=["left","right","middle"], state='readonly', width=10)
+        mb_combo = ttk.Combobox(mb_frame, textvariable=self.default_button_var, 
+                               values=["left","right","middle"], state='readonly', width=8)
         mb_combo.pack(side=tk.LEFT, padx=6)
         mb_combo.bind('<<ComboboxSelected>>', lambda e: self.add_progress_text(f"默认鼠标键设置为 {self.default_button_var.get()}"))
 
-        # Capture buttons
-        btn_frame = tk.Frame(coord_frame)
-        btn_frame.pack(fill=tk.X, pady=6)
-        self.coord_btn = tk.Button(btn_frame, text="开始获取坐标 (按F2记录)", bg='#3498db', fg='white', command=self.start_coord_capture)
-        self.coord_btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.stop_capture_btn = tk.Button(btn_frame, text="停止获取坐标", bg='#95a5a6', fg='white', state=tk.DISABLED, command=self.stop_coord_capture)
+        # 捕获按钮
+        btn_frame = tk.Frame(top_row)
+        btn_frame.pack(side=tk.RIGHT)
+        self.coord_btn = tk.Button(btn_frame, text="开始获取坐标 (F2)", bg='#3498db', fg='white', 
+                                  command=self.start_coord_capture, width=15)
+        self.coord_btn.pack(side=tk.LEFT)
+        self.stop_capture_btn = tk.Button(btn_frame, text="停止获取坐标", bg='#95a5a6', fg='white', 
+                                         state=tk.DISABLED, command=self.stop_coord_capture, width=12)
         self.stop_capture_btn.pack(side=tk.LEFT, padx=6)
 
-        # Current coordinate preview
-        self.current_coord_label = tk.Label(coord_frame, text="当前坐标: (0,0)")
-        self.current_coord_label.pack(fill=tk.X)
-        self.coord_status = tk.Label(coord_frame, text="捕获未启动", fg='#e74c3c')
-        self.coord_status.pack(fill=tk.X, pady=(2,4))
+        # 坐标预览
+        coord_preview_frame = tk.Frame(coord_frame)
+        coord_preview_frame.pack(fill=tk.X, pady=4)
+        self.current_coord_label = tk.Label(coord_preview_frame, text="当前坐标: (0,0)", font=('Arial', 10))
+        self.current_coord_label.pack(side=tk.LEFT)
+        self.coord_status = tk.Label(coord_preview_frame, text="捕获未启动", fg='#e74c3c', font=('Arial', 10))
+        self.coord_status.pack(side=tk.RIGHT)
 
-        # Points list (with button label)
+        # 点位列表区域
         points_frame = tk.LabelFrame(parent, text="点位列表（双击编辑）", padx=6, pady=6)
         points_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0,8))
-        # 列表和滚动条放在左侧，占据主要空间
-        list_scroll_frame = tk.Frame(points_frame)
-        list_scroll_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.points_listbox = tk.Listbox(list_scroll_frame, font=('Consolas',10), activestyle='none')
+        
+        # 主内容区域：列表在左，按钮在右
+        content_frame = tk.Frame(points_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 列表区域（占据主要空间）
+        list_frame = tk.Frame(content_frame)
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        self.points_listbox = tk.Listbox(list_frame, font=('Consolas', 9), activestyle='none')
         self.points_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.points_listbox.bind('<Double-1>', self.edit_selected_point)
 
-        scrollbar = tk.Scrollbar(list_scroll_frame, command=self.points_listbox.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.points_listbox.config(yscrollcommand=scrollbar.set)
+        list_scrollbar = tk.Scrollbar(list_frame, command=self.points_listbox.yview)
+        list_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.points_listbox.config(yscrollcommand=list_scrollbar.set)
 
-        # 竖向排列的按钮框架
-        ops = tk.Frame(points_frame)
-        ops.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 0))  # 放在右侧，垂直填充
-
-        # 所有按钮竖向排列，设置固定宽度使按钮大小一致
-        btn_width = 10
-        tk.Button(ops, text="添加当前坐标", command=self.add_current_point, width=btn_width).pack(pady=2)
-        tk.Button(ops, text="删除选中", bg='#e74c3c', fg='white', command=self.delete_selected_point, width=btn_width).pack(pady=2)
-        tk.Button(ops, text="清空所有", bg='#e67e22', fg='white', command=self.clear_all_points, width=btn_width).pack(pady=2)
-        tk.Button(ops, text="上移", command=lambda: self.move_selected(-1), width=btn_width).pack(pady=2)
-        tk.Button(ops, text="下移", command=lambda: self.move_selected(1), width=btn_width).pack(pady=2)
-        tk.Button(ops, text="重命名", command=self.rename_selected_point, width=btn_width).pack(pady=2)
+        # 按钮区域（右侧竖向排列）
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(8, 0))
+        
+        # 按钮分组：操作按钮和移动按钮
+        btn_width = 12
+        
+        # 主要操作按钮
+        op_buttons = [
+            ("添加当前坐标", self.add_current_point, '#3498db'),
+            ("删除选中", self.delete_selected_point, '#e74c3c'),
+            ("清空所有", self.clear_all_points, '#e67e22'),
+        ]
+        
+        for text, command, color in op_buttons:
+            btn = tk.Button(button_frame, text=text, command=command, 
+                           bg=color, fg='white', width=btn_width)
+            btn.pack(pady=2, fill=tk.X)
+        
+        # 分隔线
+        separator = ttk.Separator(button_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=6)
+        
+        # 移动和重命名按钮
+        move_buttons = [
+            ("上移", lambda: self.move_selected(-1), '#2ecc71'),
+            ("下移", lambda: self.move_selected(1), '#2ecc71'),
+            ("重命名", self.rename_selected_point, '#9b59b6'),
+        ]
+        
+        for text, command, color in move_buttons:
+            btn = tk.Button(button_frame, text=text, command=command, 
+                           bg=color, fg='white', width=btn_width)
+            btn.pack(pady=2, fill=tk.X)
 
     def create_right_panel(self, parent):
         settings = tk.LabelFrame(parent, text="任务设置", padx=8, pady=8)
         settings.pack(fill=tk.X, padx=8, pady=8)
 
-        row1 = tk.Frame(settings)
-        row1.pack(fill=tk.X, pady=4)
-        tk.Label(row1, text="每点点击次数:").pack(side=tk.LEFT)
-        tk.Spinbox(row1, from_=1, to=999, textvariable=self.click_count_var, width=6).pack(side=tk.LEFT, padx=6)
-        tk.Label(row1, text="基础延时(秒):").pack(side=tk.LEFT, padx=(10,0))
-        tk.Spinbox(row1, from_=0.0, to=60.0, increment=0.1, textvariable=self.base_delay_var, width=6).pack(side=tk.LEFT, padx=6)
-
-        row2 = tk.Frame(settings)
-        row2.pack(fill=tk.X, pady=4)
-        tk.Label(row2, text="循环次数:").pack(side=tk.LEFT)
-        tk.Spinbox(row2, from_=1, to=99999, textvariable=self.loop_var, width=6).pack(side=tk.LEFT, padx=6)
-        tk.Label(row2, text="随机偏移(px ±):").pack(side=tk.LEFT, padx=(10,0))
-        tk.Spinbox(row2, from_=0, to=500, textvariable=self.random_offset_var, width=6).pack(side=tk.LEFT, padx=6)
-        tk.Label(row2, text="随机延时(s ±):").pack(side=tk.LEFT, padx=(10,0))
-        tk.Spinbox(row2, from_=0.0, to=10.0, increment=0.05, textvariable=self.random_delay_var, width=6).pack(side=tk.LEFT, padx=6)
-
-        row3 = tk.Frame(settings)
-        row3.pack(fill=tk.X, pady=4)
-        tk.Label(row3, text="启动倒计时(秒):").pack(side=tk.LEFT)
-        tk.Spinbox(row3, from_=0, to=60, textvariable=self.countdown_var, width=6).pack(side=tk.LEFT, padx=6)
-        tk.Label(row3, text="任务结束动作:").pack(side=tk.LEFT, padx=(10,0))
-        ttk.Combobox(row3, textvariable=self.auto_action_var, values=["none", "sound"], state='readonly', width=10).pack(side=tk.LEFT, padx=6)
-
-        row4 = tk.Frame(settings)
-        row4.pack(fill=tk.X, pady=4)
-        tk.Checkbutton(row4, text="启动前显示确认窗口", variable=self.show_confirmation_var).pack(side=tk.LEFT)
+        # 使用网格布局更整齐
+        settings_grid = tk.Frame(settings)
+        settings_grid.pack(fill=tk.X, padx=4, pady=4)
         
-        # 添加调试模式选项
-        row5 = tk.Frame(settings)
-        row5.pack(fill=tk.X, pady=4)
-        tk.Checkbutton(row5, text="调试模式（每个点位需按F4继续）", variable=self.debug_mode_var).pack(side=tk.LEFT)
+        # 第一行：基础设置
+        tk.Label(settings_grid, text="每点点击次数:").grid(row=0, column=0, sticky='w', padx=2, pady=2)
+        tk.Spinbox(settings_grid, from_=1, to=999, textvariable=self.click_count_var, width=8).grid(row=0, column=1, padx=2, pady=2)
         
-        # 安全设置区域
-        safety_frame = tk.Frame(settings)
-        safety_frame.pack(fill=tk.X, pady=4)
-        tk.Checkbutton(safety_frame, text="启用安全检测", variable=self.enable_safety_check).pack(side=tk.LEFT)
-        tk.Label(safety_frame, text="移动阈值(px):").pack(side=tk.LEFT, padx=(10,0))
-        self.safety_threshold_var = tk.IntVar(value=250)
-        tk.Spinbox(safety_frame, from_=50, to=1000, textvariable=self.safety_threshold_var, width=5).pack(side=tk.LEFT, padx=6)
+        tk.Label(settings_grid, text="基础延时(秒):").grid(row=0, column=2, sticky='w', padx=(10,2), pady=2)
+        tk.Spinbox(settings_grid, from_=0.0, to=60.0, increment=0.1, textvariable=self.base_delay_var, width=8).grid(row=0, column=3, padx=2, pady=2)
+        
+        tk.Label(settings_grid, text="循环次数:").grid(row=0, column=4, sticky='w', padx=(10,2), pady=2)
+        tk.Spinbox(settings_grid, from_=1, to=99999, textvariable=self.loop_var, width=8).grid(row=0, column=5, padx=2, pady=2)
 
-        # Control buttons
-        ctrl = tk.Frame(settings)
-        ctrl.pack(fill=tk.X, pady=(8,0))
-        self.start_btn = tk.Button(ctrl, text="启动任务 (F3)", bg='#2ecc71', fg='white', command=self.start_task)
-        self.start_btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.pause_btn = tk.Button(ctrl, text="暂停 (F4)", bg='#f39c12', fg='white', command=self.toggle_pause, state=tk.DISABLED)
-        self.pause_btn.pack(side=tk.LEFT, padx=6)
-        self.stop_btn = tk.Button(ctrl, text="停止", bg='#e74c3c', fg='white', command=self.stop_task, state=tk.DISABLED)
-        self.stop_btn.pack(side=tk.LEFT, padx=6)
-        self.tray_btn = tk.Button(ctrl, text="最小化到托盘", command=self.minimize_to_tray)
-        self.tray_btn.pack(side=tk.LEFT, padx=6)
+        # 第二行：随机设置
+        tk.Label(settings_grid, text="随机偏移(px ±):").grid(row=1, column=0, sticky='w', padx=2, pady=2)
+        tk.Spinbox(settings_grid, from_=0, to=500, textvariable=self.random_offset_var, width=8).grid(row=1, column=1, padx=2, pady=2)
+        
+        tk.Label(settings_grid, text="随机延时(s ±):").grid(row=1, column=2, sticky='w', padx=(10,2), pady=2)
+        tk.Spinbox(settings_grid, from_=0.0, to=10.0, increment=0.05, textvariable=self.random_delay_var, width=8).grid(row=1, column=3, padx=2, pady=2)
+        
+        tk.Label(settings_grid, text="启动倒计时(秒):").grid(row=1, column=4, sticky='w', padx=(10,2), pady=2)
+        tk.Spinbox(settings_grid, from_=0, to=60, textvariable=self.countdown_var, width=8).grid(row=1, column=5, padx=2, pady=2)
 
-        # Progress & logs
+        # 第三行：动作和选项
+        tk.Label(settings_grid, text="任务结束动作:").grid(row=2, column=0, sticky='w', padx=2, pady=2)
+        ttk.Combobox(settings_grid, textvariable=self.auto_action_var, values=["none", "sound"], 
+                    state='readonly', width=8).grid(row=2, column=1, padx=2, pady=2)
+        
+        # 选项区域
+        options_frame = tk.Frame(settings_grid)
+        options_frame.grid(row=2, column=2, columnspan=4, sticky='ew', padx=2, pady=2)
+        
+        tk.Checkbutton(options_frame, text="启动前确认", variable=self.show_confirmation_var).pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(options_frame, text="调试模式", variable=self.debug_mode_var).pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(options_frame, text="安全检测", variable=self.enable_safety_check).pack(side=tk.LEFT, padx=8)
+        
+        # 安全阈值设置
+        safety_frame = tk.Frame(options_frame)
+        safety_frame.pack(side=tk.LEFT, padx=8)
+        tk.Label(safety_frame, text="阈值:").pack(side=tk.LEFT)
+        tk.Spinbox(safety_frame, from_=50, to=1000, textvariable=self.safety_threshold_var, width=5).pack(side=tk.LEFT, padx=2)
+
+        # 控制按钮
+        ctrl_frame = tk.Frame(settings)
+        ctrl_frame.pack(fill=tk.X, pady=(8,0))
+        
+        self.start_btn = tk.Button(ctrl_frame, text="启动任务 (F3)", bg='#2ecc71', fg='white', 
+                                  command=self.start_task, height=2, font=('Arial', 10, 'bold'))
+        self.start_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,4))
+        
+        self.pause_btn = tk.Button(ctrl_frame, text="暂停 (F4)", bg='#f39c12', fg='white', 
+                                  command=self.toggle_pause, state=tk.DISABLED, width=10)
+        self.pause_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.stop_btn = tk.Button(ctrl_frame, text="停止", bg='#e74c3c', fg='white', 
+                                 command=self.stop_task, state=tk.DISABLED, width=8)
+        self.stop_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.tray_btn = tk.Button(ctrl_frame, text="托盘", command=self.minimize_to_tray, width=6)
+        self.tray_btn.pack(side=tk.LEFT, padx=2)
+
+        # 进度和日志区域
         progress_frame = tk.LabelFrame(parent, text="执行进度与日志", padx=8, pady=8)
         progress_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.current_task_label = tk.Label(progress_frame, text="当前任务: 无", anchor=tk.W, justify=tk.LEFT)
+        # 当前任务信息
+        task_frame = tk.Frame(progress_frame)
+        task_frame.pack(fill=tk.X, pady=(0,6))
+        self.current_task_label = tk.Label(task_frame, text="当前任务: 无", anchor=tk.W, justify=tk.LEFT, font=('Arial', 9))
         self.current_task_label.pack(fill=tk.X)
 
+        # 进度条
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=6)
+        self.progress_bar.pack(fill=tk.X, pady=(0,6))
 
-        # Stats area
+        # 统计信息
         stats_frame = tk.Frame(progress_frame)
         stats_frame.pack(fill=tk.X, pady=(0,6))
-        self.stats_label = tk.Label(stats_frame, text=self._stats_text(), anchor=tk.W, justify=tk.LEFT, fg="#333")
+        self.stats_label = tk.Label(stats_frame, text=self._stats_text(), anchor=tk.W, justify=tk.LEFT, 
+                                   fg="#333", font=('Arial', 9))
         self.stats_label.pack(fill=tk.X)
 
-        # Log text
-        self.progress_details = tk.Text(progress_frame, height=12, state=tk.DISABLED)
-        self.progress_details.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        pd_scroll = tk.Scrollbar(progress_frame, command=self.progress_details.yview)
-        pd_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.progress_details.config(yscrollcommand=pd_scroll.set)
+        # 日志文本框
+        log_frame = tk.Frame(progress_frame)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.progress_details = tk.Text(log_frame, height=12, state=tk.DISABLED, font=('Consolas', 9))
+        self.progress_details.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        log_scrollbar = tk.Scrollbar(log_frame, command=self.progress_details.yview)
+        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.progress_details.config(yscrollcommand=log_scrollbar.set)
 
     # ---------------- Theme ----------------
     def set_theme(self, name):
@@ -374,29 +430,66 @@ class AutoClickerApp:
     def apply_theme(self):
         theme = self.theme_var.get()
         if theme == "dark":
-            bg = "#2b2b2b"
-            panel = "#333333"
+            # 深色主题配色
+            bg = "#1e1e1e"
+            panel = "#2d2d2d"
             fg = "#eaeaea"
-            entry_bg = "#3b3b3b"
+            entry_bg = "#3d3d3d"
+            highlight = "#4a4a4a"
+            button_bg = "#404040"
+            button_fg = "#ffffff"
         else:
-            bg = "#f0f0f0"
+            # 浅色主题配色
+            bg = "#f5f5f5"
             panel = "#ffffff"
             fg = "#222222"
             entry_bg = "#ffffff"
+            highlight = "#e0e0e0"
+            button_bg = "#f0f0f0"
+            button_fg = "#000000"
 
-        # root
+        # 应用主题到所有组件
         self.root.configure(bg=bg)
-        # status
+        
+        # 状态栏
         try:
             self.status_bar.configure(bg=bg, fg=fg)
         except Exception:
             pass
-        # panels
-        for child in self.root.winfo_children():
+        
+        # 递归应用主题到所有子组件
+        def apply_to_children(widget):
             try:
-                child.configure(bg=panel)
+                if isinstance(widget, (tk.Frame, tk.LabelFrame)):
+                    widget.configure(bg=panel)
+                elif isinstance(widget, tk.Label):
+                    widget.configure(bg=panel, fg=fg)
+                elif isinstance(widget, tk.Button):
+                    # 保留特殊按钮的颜色，只修改普通按钮
+                    current_bg = widget.cget('bg')
+                    if current_bg in ['SystemButtonFace', '#f0f0f0', '#d9d9d9']:
+                        widget.configure(bg=button_bg, fg=button_fg)
+                elif isinstance(widget, tk.Entry):
+                    widget.configure(bg=entry_bg, fg=fg, insertbackground=fg)
+                elif isinstance(widget, tk.Listbox):
+                    widget.configure(bg=entry_bg, fg=fg, selectbackground=highlight)
+                elif isinstance(widget, tk.Text):
+                    widget.configure(bg=entry_bg, fg=fg, insertbackground=fg)
+                elif isinstance(widget, ttk.Combobox):
+                    # ttk 组件需要特殊处理
+                    style = ttk.Style()
+                    if theme == "dark":
+                        style.configure("TCombobox", fieldbackground=entry_bg, background=entry_bg, foreground=fg)
+                    else:
+                        style.configure("TCombobox", fieldbackground=entry_bg, background=entry_bg, foreground=fg)
             except Exception:
                 pass
+            
+            for child in widget.winfo_children():
+                apply_to_children(child)
+        
+        for child in self.root.winfo_children():
+            apply_to_children(child)
 
     # ---------------- Coordinate preview & capture ----------------
     def update_coord_preview(self):
@@ -937,9 +1030,9 @@ class AutoClickerApp:
     def show_help(self):
         help_text = (
             "使用说明：\n"
-            "- 点击“开始获取坐标”进入捕获模式，然后将鼠标移动到目标位置按 F2 记录坐标（支持全局）。\n"
+            "- 点击\"开始获取坐标\"进入捕获模式，然后将鼠标移动到目标位置按 F2 记录坐标（支持全局）。\n"
             "- 双击点位可编辑坐标/名称/按钮/延时；选中点位可上移/下移/删除/重命名。\n"
-            "- 配置好参数后点击“启动任务”；开始前会显示任务摘要确认并可倒计时。\n"
+            "- 配置好参数后点击\"启动任务\"；开始前会显示任务摘要确认并可倒计时。\n"
             "- 快捷键：F2(记录坐标), F3(开始/停止), F4(暂停/继续)（全局需 keyboard 支持）\n"
             "- 新增安全机制：若程序检测到鼠标快速移动（例如手动操作），会自动暂停任务以防误点。\n"
             "- 支持托盘最小化（最小化后右键托盘可恢复/停止/退出），支持浅/深主题切换。\n"
@@ -1164,27 +1257,50 @@ class AddPointDialog:
         self.top = tk.Toplevel(parent)
         self.top.title("添加点位")
         self.top.resizable(False, False)
+        self.top.transient(parent)  # 设置为主窗口的子窗口
+        self.top.grab_set()  # 模态对话框
         self.result = None
+        
+        # 居中显示
+        self.top.geometry("+%d+%d" % (parent.winfo_rootx()+50, parent.winfo_rooty()+50))
 
-        tk.Label(self.top, text=f"当前位置：({x}, {y})").pack(padx=8, pady=(8,4))
-        tk.Label(self.top, text="名称:").pack(anchor='w', padx=8)
-        self.name_entry = tk.Entry(self.top)
+        main_frame = tk.Frame(self.top, padx=12, pady=12)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        tk.Label(main_frame, text=f"当前位置：({x}, {y})", font=('Arial', 9)).pack(anchor='w', pady=(0,8))
+        
+        # 名称
+        name_frame = tk.Frame(main_frame)
+        name_frame.pack(fill=tk.X, pady=4)
+        tk.Label(name_frame, text="名称:", width=8, anchor='w').pack(side=tk.LEFT)
+        self.name_entry = tk.Entry(name_frame)
+        self.name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.name_entry.insert(0, f"点位({x},{y})")
-        self.name_entry.pack(fill=tk.X, padx=8, pady=4)
-
-        tk.Label(self.top, text="点击键:").pack(anchor='w', padx=8)
+        
+        # 点击键和延时在同一行
+        settings_frame = tk.Frame(main_frame)
+        settings_frame.pack(fill=tk.X, pady=4)
+        
+        tk.Label(settings_frame, text="点击键:", width=8, anchor='w').pack(side=tk.LEFT)
         self.button_var = tk.StringVar(value=default_button)
-        ttk.Combobox(self.top, textvariable=self.button_var, values=['left','right'], state='readonly').pack(fill=tk.X, padx=8, pady=4)
-
-        tk.Label(self.top, text="点内延时(秒):").pack(anchor='w', padx=8)
-        self.delay_entry = tk.Entry(self.top)
+        ttk.Combobox(settings_frame, textvariable=self.button_var, values=['left','right'], 
+                    state='readonly', width=8).pack(side=tk.LEFT, padx=(0,10))
+        
+        tk.Label(settings_frame, text="延时(秒):", width=8, anchor='w').pack(side=tk.LEFT)
+        self.delay_entry = tk.Entry(settings_frame, width=8)
+        self.delay_entry.pack(side=tk.LEFT)
         self.delay_entry.insert(0, str(default_delay))
-        self.delay_entry.pack(fill=tk.X, padx=8, pady=(0,8))
 
-        btnf = tk.Frame(self.top)
-        btnf.pack(fill=tk.X, pady=(0,8))
-        tk.Button(btnf, text="确认", command=lambda: self.on_ok(x, y)).pack(side=tk.LEFT, padx=8)
-        tk.Button(btnf, text="取消", command=self.on_cancel).pack(side=tk.LEFT)
+        # 按钮
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(8,0))
+        tk.Button(btn_frame, text="确认", command=lambda: self.on_ok(x, y), 
+                 bg='#2ecc71', fg='white', width=8).pack(side=tk.RIGHT, padx=(6,0))
+        tk.Button(btn_frame, text="取消", command=self.on_cancel, 
+                 width=8).pack(side=tk.RIGHT)
+
+        self.name_entry.focus()
+        self.name_entry.select_range(0, tk.END)
 
     def on_ok(self, x, y):
         name = self.name_entry.get().strip() or f"点位({x},{y})"
@@ -1205,36 +1321,62 @@ class EditPointDialog:
         self.top = tk.Toplevel(parent)
         self.top.title("编辑点位")
         self.top.resizable(False, False)
+        self.top.transient(parent)
+        self.top.grab_set()
         self.result = None
+        
+        # 居中显示
+        self.top.geometry("+%d+%d" % (parent.winfo_rootx()+50, parent.winfo_rooty()+50))
 
-        tk.Label(self.top, text="名称:").pack(anchor='w', padx=8, pady=(8,0))
-        self.name_entry = tk.Entry(self.top)
-        self.name_entry.pack(fill=tk.X, padx=8, pady=(0,4))
+        main_frame = tk.Frame(self.top, padx=12, pady=12)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 名称
+        name_frame = tk.Frame(main_frame)
+        name_frame.pack(fill=tk.X, pady=4)
+        tk.Label(name_frame, text="名称:", width=8, anchor='w').pack(side=tk.LEFT)
+        self.name_entry = tk.Entry(name_frame)
+        self.name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.name_entry.insert(0, name)
 
-        tk.Label(self.top, text="X:").pack(anchor='w', padx=8)
-        self.x_entry = tk.Entry(self.top)
-        self.x_entry.pack(fill=tk.X, padx=8, pady=(0,4))
+        # 坐标设置
+        coord_frame = tk.Frame(main_frame)
+        coord_frame.pack(fill=tk.X, pady=4)
+        
+        tk.Label(coord_frame, text="X坐标:", width=8, anchor='w').pack(side=tk.LEFT)
+        self.x_entry = tk.Entry(coord_frame, width=8)
+        self.x_entry.pack(side=tk.LEFT, padx=(0,10))
         self.x_entry.insert(0, str(x))
-
-        tk.Label(self.top, text="Y:").pack(anchor='w', padx=8)
-        self.y_entry = tk.Entry(self.top)
-        self.y_entry.pack(fill=tk.X, padx=8, pady=(0,4))
+        
+        tk.Label(coord_frame, text="Y坐标:", width=8, anchor='w').pack(side=tk.LEFT)
+        self.y_entry = tk.Entry(coord_frame, width=8)
+        self.y_entry.pack(side=tk.LEFT)
         self.y_entry.insert(0, str(y))
 
-        tk.Label(self.top, text="点击键:").pack(anchor='w', padx=8)
+        # 点击键和延时
+        settings_frame = tk.Frame(main_frame)
+        settings_frame.pack(fill=tk.X, pady=4)
+        
+        tk.Label(settings_frame, text="点击键:", width=8, anchor='w').pack(side=tk.LEFT)
         self.button_var = tk.StringVar(value=button)
-        ttk.Combobox(self.top, textvariable=self.button_var, values=['left','right'], state='readonly').pack(fill=tk.X, padx=8, pady=(0,4))
-
-        tk.Label(self.top, text="点内延时(秒):").pack(anchor='w', padx=8)
-        self.delay_entry = tk.Entry(self.top)
-        self.delay_entry.pack(fill=tk.X, padx=8, pady=(0,8))
+        ttk.Combobox(settings_frame, textvariable=self.button_var, values=['left','right'], 
+                    state='readonly', width=8).pack(side=tk.LEFT, padx=(0,10))
+        
+        tk.Label(settings_frame, text="延时(秒):", width=8, anchor='w').pack(side=tk.LEFT)
+        self.delay_entry = tk.Entry(settings_frame, width=8)
+        self.delay_entry.pack(side=tk.LEFT)
         self.delay_entry.insert(0, str(delay))
 
-        btnf = tk.Frame(self.top)
-        btnf.pack(fill=tk.X, pady=(0,8))
-        tk.Button(btnf, text="确定", command=self.on_ok).pack(side=tk.LEFT, padx=8)
-        tk.Button(btnf, text="取消", command=self.on_cancel).pack(side=tk.LEFT)
+        # 按钮
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(8,0))
+        tk.Button(btn_frame, text="确定", command=self.on_ok, 
+                 bg='#2ecc71', fg='white', width=8).pack(side=tk.RIGHT, padx=(6,0))
+        tk.Button(btn_frame, text="取消", command=self.on_cancel, 
+                 width=8).pack(side=tk.RIGHT)
+
+        self.name_entry.focus()
+        self.name_entry.select_range(0, tk.END)
 
     def on_ok(self):
         try:
