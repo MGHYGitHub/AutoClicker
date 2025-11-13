@@ -3,12 +3,12 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo    AutoClicker 2.3 编译脚本
+echo    AutoClicker 2.4 编译脚本
 echo ========================================
 echo.
 
 set "SOURCE_FILE=autoclicker.py"
-set "OUTPUT_NAME=AutoClicker_v2.3"
+set "OUTPUT_NAME=AutoClicker_v2.4"
 
 :: 简单直接的检查
 if not exist "%SOURCE_FILE%" (
@@ -24,12 +24,23 @@ if errorlevel 1 goto :error
 echo 步骤2/5: 安装依赖...
 pip install pyautogui pystray Pillow keyboard requests pyinstaller >nul 2>&1
 
-echo 步骤3/5: 清理旧文件...
+echo 步骤3/5: 检查图标文件...
+set "ICON_FILE=icon.ico"
+if not exist "!ICON_FILE!" (
+    echo [警告] 找不到图标文件 !ICON_FILE!
+    echo 将使用默认图标编译
+    set "ICON_OPT="
+) else (
+    set "ICON_OPT=--icon=!ICON_FILE!"
+    echo 找到图标文件: !ICON_FILE!
+)
+
+echo 步骤4/5: 清理旧文件...
 if exist "build" rmdir /s /q "build" 2>nul
 if exist "dist" rmdir /s /q "dist" 2>nul
 if exist "*.spec" del "*.spec" 2>nul
 
-echo 步骤4/5: 选择模式...
+echo 步骤5/5: 选择模式...
 echo 1. 单文件模式 (推荐)
 echo 2. 调试模式
 echo.
@@ -41,10 +52,10 @@ if errorlevel 2 (
     set "OPTS=--onefile --windowed"
 )
 
-echo 步骤5/5: 开始编译...
+echo 步骤6/6: 开始编译...
 echo 请稍候，这需要几分钟...
 
-pyinstaller !OPTS! --noconfirm --clean --name "!OUTPUT_NAME!" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=keyboard._winkeyboard "%SOURCE_FILE%"
+pyinstaller !OPTS! --noconfirm --clean --name "!OUTPUT_NAME!" !ICON_OPT! --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=keyboard._winkeyboard "%SOURCE_FILE%"
 
 if errorlevel 1 goto :error
 
