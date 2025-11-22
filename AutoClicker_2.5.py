@@ -79,7 +79,13 @@ CLICK_REPORT = "click_log.txt"
 VERSION = "2.5.0"  # 更新版本号
 # If you have a URL to check updates, set it here.
 # For safety, by default it's empty; update_check won't run if empty.
-UPDATE_CHECK_URL = "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json"  # e.g. "https://example.com/autoclicker/version.json"
+# UPDATE_CHECK_URL = "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json"  # e.g. "https://example.com/autoclicker/version.json"
+# 在文件开头的常量定义部分添加备用URL
+UPDATE_CHECK_URLS = [
+    "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json",
+    "https://cdn.jsdelivr.net/gh/MGHYGitHub/AutoClicker@main/version.json",  # jsDelivr CDN
+    # 可以添加更多备用源
+]
 
 
 # ------------- Logging & helpers -------------
@@ -421,8 +427,12 @@ class AutoClickerApp:
         self.update_coord_preview()
 
         # Auto update check in background (non-blocking)
-        if UPDATE_CHECK_URL:
-            threading.Thread(target=self.check_update, daemon=True).start()
+        if UPDATE_CHECK_URLS:
+            # 延迟2秒后检查，避免影响程序启动速度
+            self.root.after(
+                2000,
+                lambda: threading.Thread(target=self.check_update, daemon=True).start(),
+            )
 
         log("程序启动")
         self.add_progress_text("程序已启动。")
@@ -2583,81 +2593,210 @@ class AutoClickerApp:
             log(f"托盘退出异常: {e}")
 
     # ---------------- Update check ----------------
-    def check_update(self):
-        """检查更新 - 支持GitHub"""
+    def check_update(self, auto_check=True):
+        """检查更新 - 支持多个备用源和重试机制
+        auto_check: True表示自动检查（后台），False表示手动检查（显示对话框）
+        """
         if not HAVE_REQUESTS:
-            self.root.after(
-                0,
-                lambda: messagebox.showwarning(
-                    "检查更新",
-                    "需要 requests 库才能检查更新。\n请运行: pip install requests",
-                ),
-            )
+            if not auto_check:  # 只有手动检查时才显示警告
+                self.root.after(
+                    0,
+                    lambda: messagebox.showwarning(
+                        "检查更新",
+                        "需要 requests 库才能检查更新。\n请运行: pip install requests",
+                    ),
+                )
             return
 
-        if not UPDATE_CHECK_URL:
+        if not UPDATE_CHECK_URLS:
             return
 
-        try:
-            # 添加超时和重试机制
-            resp = requests.get(UPDATE_CHECK_URL, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                remote_version = data.get("version")
-                download_url = data.get("download_url") or data.get("url")
-                changelog = data.get("changelog", "")
-                release_notes = data.get("release_notes", "")
+        # 显示检查中的状态
+        self.status_bar.config(text="正在检查更新...")
+        if not auto_check:
+            self.add_progress_text("开始检查更新，使用多个备用源...")
 
-                if remote_version and self.is_newer_version(remote_version, VERSION):
-                    # 在UI线程中显示更新通知
-                    def notify():
-                        update_msg = (
-                            f"发现新版本 {remote_version}！\n\n当前版本: {VERSION}"
+        def check_with_feedback():
+            success = False
+            last_error = ""
+            update_available = False
+            update_info = {}
+
+            for url_index, url in enumerate(UPDATE_CHECK_URLS):
+                for attempt in range(2):  # 每个URL尝试2次
+                    try:
+                        # 显示当前尝试信息
+                        source_name = "GitHub" if "github" in url else "CDN"
+                        attempt_info = f"尝试从 {source_name} 检查更新"
+                        if attempt > 0:
+                            attempt_info += f" (重试 {attempt})"
+
+                        if not auto_check:
+                            self.add_progress_text(attempt_info)
+
+                        # 重试延迟
+                        if attempt > 0:
+                            time.sleep(2)  # 重试前等待2秒
+
+                        # 发送请求
+                        resp = requests.get(url, timeout=15)
+
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            remote_version = data.get("version")
+                            download_url = data.get("download_url") or data.get("url")
+                            changelog = data.get("changelog", "")
+                            release_notes = data.get("release_notes", "")
+
+                            if remote_version and self.is_newer_version(
+                                remote_version, VERSION
+                            ):
+                                update_available = True
+                                update_info = {
+                                    "version": remote_version,
+                                    "download_url": download_url,
+                                    "changelog": changelog,
+                                    "release_notes": release_notes,
+                                }
+                                if not auto_check:
+
+                                    def notify():
+                                        update_msg = f"发现新版本 {remote_version}！\n\n当前版本: {VERSION}"
+
+                                        if changelog:
+                                            update_msg += f"\n\n更新内容:\n{changelog}"
+                                        if release_notes:
+                                            update_msg += (
+                                                f"\n\n发布说明:\n{release_notes}"
+                                            )
+
+                                        update_msg += "\n\n是否打开下载页面？"
+
+                                        if messagebox.askyesno(
+                                            "检测到新版本", update_msg
+                                        ):
+                                            self.open_download_page(
+                                                download_url
+                                                or "https://github.com/MGHYGitHub/AutoClicker/releases"
+                                            )
+
+                                    self.root.after(0, notify)
+                                if auto_check:
+                                    self.add_progress_text(
+                                        f"发现新版本: {remote_version}"
+                                    )
+                                else:
+                                    self.add_progress_text(
+                                        f"发现新版本: {remote_version}"
+                                    )
+                            else:
+                                if not auto_check:
+
+                                    def notify_up_to_date():
+                                        messagebox.showinfo(
+                                            "检查更新", f"当前已是最新版本 ({VERSION})"
+                                        )
+
+                                    self.root.after(0, notify_up_to_date)
+                                if auto_check:
+                                    self.add_progress_text("当前已是最新版本")
+                                else:
+                                    self.add_progress_text("当前已是最新版本")
+
+                            success = True
+                            if not auto_check:
+                                self.add_progress_text(
+                                    f"更新检查成功 (来源: {source_name})"
+                                )
+                            break  # 成功获取，跳出重试循环
+
+                        else:
+                            last_error = f"HTTP状态码: {resp.status_code}"
+                            log(f"更新检查失败 [{url}]，HTTP状态码: {resp.status_code}")
+
+                    except requests.exceptions.Timeout:
+                        last_error = "连接超时"
+                        log(f"更新检查超时 [{url}] (尝试 {attempt + 1})")
+
+                    except requests.exceptions.ConnectionError as e:
+                        last_error = f"连接错误: {str(e)}"
+                        log(f"更新检查连接错误 [{url}] (尝试 {attempt + 1}): {e}")
+
+                    except requests.exceptions.JSONDecodeError as e:
+                        last_error = "响应数据格式错误"
+                        log(f"更新检查JSON解析错误 [{url}]: {e}")
+
+                    except Exception as e:
+                        last_error = f"未知错误: {str(e)}"
+                        log(f"更新检查失败 [{url}] (尝试 {attempt + 1}): {e}")
+
+                if success:
+                    break  # 成功获取，跳出URL循环
+
+            # 更新状态栏
+            self.root.after(0, lambda: self.status_bar.config(text="就绪"))
+
+            # 自动检查时发现新版本，显示通知但不阻塞
+            if auto_check and update_available:
+
+                def show_update_notification():
+                    update_msg = (
+                        f"发现新版本 {update_info['version']}！\n\n当前版本: {VERSION}"
+                    )
+
+                    if update_info["changelog"]:
+                        update_msg += f"\n\n更新内容:\n{update_info['changelog']}"
+                    if update_info["release_notes"]:
+                        update_msg += f"\n\n发布说明:\n{update_info['release_notes']}"
+
+                    update_msg += "\n\n是否打开下载页面？"
+
+                    # 使用askyesno会阻塞，但我们希望用户能看到通知
+                    if messagebox.askyesno("检测到新版本", update_msg):
+                        self.open_download_page(
+                            update_info["download_url"]
+                            or "https://github.com/MGHYGitHub/AutoClicker/releases"
                         )
 
-                        if changelog:
-                            update_msg += f"\n\n更新内容:\n{changelog}"
-                        if release_notes:
-                            update_msg += f"\n\n发布说明:\n{release_notes}"
+                self.root.after(0, show_update_notification)
 
-                        update_msg += "\n\n是否打开下载页面？"
+            # 所有尝试都失败
+            if not success and not auto_check:
+                self.root.after(0, lambda: self.show_update_failed_message(last_error))
+                self.add_progress_text(f"更新检查失败: {last_error}")
 
-                        if messagebox.askyesno("检测到新版本", update_msg):
-                            self.open_download_page(
-                                download_url
-                                or "https://github.com/MGHYGitHub/AutoClicker/releases"
-                            )
+        # 在后台线程中执行检查
+        threading.Thread(target=check_with_feedback, daemon=True).start()
 
-                    self.root.after(0, notify)
-                else:
+    def show_update_failed_message(self, error_detail=""):
+        """显示更新失败消息"""
+        error_msg = (
+            "暂时无法连接到更新服务器。\n\n"
+            "这可能是因为:\n"
+            "• 网络连接问题\n"
+            "• GitHub访问限制\n"
+            "• 防火墙或代理设置\n"
+            "• 服务器暂时不可用\n\n"
+        )
 
-                    def notify_up_to_date():
-                        messagebox.showinfo("检查更新", f"当前已是最新版本 ({VERSION})")
+        if error_detail:
+            error_msg += f"错误详情: {error_detail}\n\n"
 
-                    self.root.after(0, notify_up_to_date)
-            else:
-                log(f"更新检查失败，HTTP状态码: {resp.status_code}")
-        except requests.exceptions.Timeout:
-            log("更新检查超时")
-            self.root.after(
-                0,
-                lambda: messagebox.showwarning("检查更新", "连接超时，请检查网络连接"),
-            )
-        except requests.exceptions.ConnectionError:
-            log("更新检查连接错误")
-            self.root.after(
-                0,
-                lambda: messagebox.showwarning(
-                    "检查更新", "网络连接错误，请检查网络设置"
-                ),
-            )
-        except Exception as e:
-            log(f"检查更新失败: {e}")
-            self.root.after(
-                0,
-                lambda: messagebox.showerror(
-                    "检查更新", f"检查更新时发生错误: {str(e)}"
-                ),
+        error_msg += (
+            "您可以:\n"
+            "1. 检查网络连接后重试\n"
+            "2. 手动访问项目页面查看更新\n"
+            "3. 稍后再试"
+        )
+
+        # 提供更多选项
+        choice = messagebox.askyesno(
+            "检查更新失败", error_msg + "\n\n是否立即手动访问项目页面？"
+        )
+
+        if choice:
+            self.open_download_page(
+                "https://github.com/MGHYGitHub/AutoClicker/releases"
             )
 
     def is_newer_version(self, remote, current):
@@ -2701,10 +2840,10 @@ class AutoClickerApp:
             messagebox.showerror("错误", f"无法打开浏览器: {e}")
 
     def manual_check_update(self):
-        """手动检查更新"""
-        if not UPDATE_CHECK_URL:
+        """手动检查更新 - 提供更多选项"""
+        if not UPDATE_CHECK_URLS:
             response = messagebox.askyesno(
-                "未配置更新检查", "GitHub 更新检查未配置。\n\n是否查看配置说明？"
+                "未配置更新检查", "更新检查未配置。\n\n是否查看配置说明？"
             )
             if response:
                 self.show_github_update_help()
@@ -2717,13 +2856,151 @@ class AutoClickerApp:
             )
             return
 
-        # 显示检查中的状态
+        # 提供选项让用户选择
+        choice = messagebox.askyesnocancel(
+            "检查更新",
+            "即将检查更新，这需要网络连接。\n\n"
+            "是 - 立即检查更新（自动尝试多个源）\n"
+            "否 - 手动访问GitHub页面\n"
+            "取消 - 取消操作",
+        )
+
+        if choice is None:  # 取消
+            return
+        elif not choice:  # 否 - 手动访问
+            self.open_download_page(
+                "https://github.com/MGHYGitHub/AutoClicker/releases"
+            )
+            return
+
+        # 是 - 开始检查（手动检查，auto_check=False）
         self.status_bar.config(text="正在检查更新...")
-        self.add_progress_text("开始检查 GitHub 更新...")
+        self.add_progress_text("开始手动检查更新...")
 
         def check_with_feedback():
             try:
-                self.check_update()
+                self.check_update(auto_check=False)
+            finally:
+                self.root.after(0, lambda: self.status_bar.config(text="就绪"))
+
+        threading.Thread(target=check_with_feedback, daemon=True).start()
+
+    def show_github_update_help(self):
+        """显示 GitHub 更新配置帮助"""
+        help_text = """
+    GitHub 更新检查配置：
+
+    1. 自动配置（已设置）：
+    当前已配置多个备用源，包括 GitHub 和 CDN。
+
+    2. 版本文件要求：
+    在 GitHub 仓库根目录创建 version.json 文件，内容如下：
+    {{
+        "version": "2.5.1",
+        "download_url": "https://github.com/.../下载链接",
+        "changelog": "修复了...",
+        "release_notes": "详细更新说明"
+    }}
+
+    3. 版本文件位置：
+    推荐使用 GitHub Raw 地址：
+    https://raw.githubusercontent.com/用户名/仓库名/分支名/version.json
+
+    4. 版本号比较：
+    - 支持语义化版本号 (如 2.5.1)
+    - 会自动比较远程版本是否比当前版本新
+
+    当前配置状态: 已配置多个备用源
+    当前版本: {version}
+    主要更新检查URL: {update_url}
+    """.format(
+            version=VERSION,
+            update_url=UPDATE_CHECK_URLS[0] if UPDATE_CHECK_URLS else "未配置",
+        )
+
+        messagebox.showinfo("GitHub 更新配置说明", help_text)
+
+    def is_newer_version(self, remote, current):
+        """增强版版本号比较"""
+        try:
+            # 处理版本号中的非数字字符（如 "v2.5.1" -> "2.5.1"）
+            remote = remote.lstrip("vV")
+            current = current.lstrip("vV")
+
+            # 分割版本号
+            remote_parts = list(map(int, remote.split(".")))
+            current_parts = list(map(int, current.split(".")))
+
+            # 确保长度一致
+            max_len = max(len(remote_parts), len(current_parts))
+            remote_parts.extend([0] * (max_len - len(remote_parts)))
+            current_parts.extend([0] * (max_len - len(current_parts)))
+
+            # 逐个比较
+            for r, c in zip(remote_parts, current_parts):
+                if r > c:
+                    return True
+                elif r < c:
+                    return False
+            return False  # 版本相同
+        except:
+            # 如果解析失败，使用简单的字符串比较
+            try:
+                return remote > current
+            except:
+                return False
+
+    def open_download_page(self, url):
+        """打开下载页面"""
+        try:
+            import webbrowser
+
+            webbrowser.open(url)
+            self.add_progress_text(f"已打开下载页面: {url}")
+        except Exception as e:
+            messagebox.showerror("错误", f"无法打开浏览器: {e}")
+
+    def manual_check_update(self):
+        """手动检查更新 - 提供更多选项"""
+        if not UPDATE_CHECK_URLS:
+            response = messagebox.askyesno(
+                "未配置更新检查", "更新检查未配置。\n\n是否查看配置说明？"
+            )
+            if response:
+                self.show_github_update_help()
+            return
+
+        if not HAVE_REQUESTS:
+            messagebox.showwarning(
+                "缺少依赖",
+                "需要 requests 库才能检查更新。\n\n请运行以下命令安装:\npip install requests",
+            )
+            return
+
+        # 提供选项让用户选择
+        choice = messagebox.askyesnocancel(
+            "检查更新",
+            "即将检查更新，这需要网络连接。\n\n"
+            "是 - 立即检查更新（自动尝试多个源）\n"
+            "否 - 手动访问GitHub页面\n"
+            "取消 - 取消操作",
+        )
+
+        if choice is None:  # 取消
+            return
+        elif not choice:  # 否 - 手动访问
+            self.open_download_page(
+                "https://github.com/MGHYGitHub/AutoClicker/releases"
+            )
+            return
+
+        # 是 - 开始检查（手动检查，auto_check=False）
+        self.status_bar.config(text="正在检查更新...")
+        self.add_progress_text("开始手动检查更新...")
+
+        def check_with_feedback():
+            try:
+                self.check_update(auto_check=False)
             finally:
                 self.root.after(0, lambda: self.status_bar.config(text="就绪"))
 
@@ -3462,7 +3739,8 @@ class AutoClickerApp:
     当前版本: {version}
     更新检查URL: {update_url}
     """.format(
-            version=VERSION, update_url=UPDATE_CHECK_URL
+            version=VERSION,
+            update_url=UPDATE_CHECK_URLS[0] if UPDATE_CHECK_URLS else "未配置",
         )
 
         messagebox.showinfo("GitHub 更新配置说明", help_text)
