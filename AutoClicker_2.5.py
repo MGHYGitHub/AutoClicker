@@ -76,7 +76,7 @@ except Exception:
 CONFIG_FILE = "click_points.json"
 LOG_FILE = "autoclicker_log.txt"
 CLICK_REPORT = "click_log.txt"
-VERSION = "2.5"  # 更新版本号
+VERSION = "2.5.0"  # 更新版本号
 # If you have a URL to check updates, set it here.
 # For safety, by default it's empty; update_check won't run if empty.
 UPDATE_CHECK_URL = "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json"  # e.g. "https://example.com/autoclicker/version.json"
@@ -2661,9 +2661,13 @@ class AutoClickerApp:
             )
 
     def is_newer_version(self, remote, current):
-        """比较版本号，判断远程版本是否更新"""
+        """增强版版本号比较"""
         try:
-            # 简单的版本号比较 (支持 x.y.z 格式)
+            # 处理版本号中的非数字字符（如 "v2.5.1" -> "2.5.1"）
+            remote = remote.lstrip("vV")
+            current = current.lstrip("vV")
+
+            # 分割版本号
             remote_parts = list(map(int, remote.split(".")))
             current_parts = list(map(int, current.split(".")))
 
@@ -2672,10 +2676,19 @@ class AutoClickerApp:
             remote_parts.extend([0] * (max_len - len(remote_parts)))
             current_parts.extend([0] * (max_len - len(current_parts)))
 
-            return remote_parts > current_parts
+            # 逐个比较
+            for r, c in zip(remote_parts, current_parts):
+                if r > c:
+                    return True
+                elif r < c:
+                    return False
+            return False  # 版本相同
         except:
-            # 如果版本号解析失败，使用字符串比较
-            return remote > current
+            # 如果解析失败，使用简单的字符串比较
+            try:
+                return remote > current
+            except:
+                return False
 
     def open_download_page(self, url):
         """打开下载页面"""
