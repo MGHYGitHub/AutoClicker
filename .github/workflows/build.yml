@@ -11,10 +11,10 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest]
-        python-version: ['3.9', '3.10', '3.11']  # 移除了 3.8 避免安装问题
+        python-version: ['3.9', '3.10', '3.11']
     
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30  # 增加超时时间
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
@@ -24,7 +24,7 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'  # 启用 pip 缓存
+        cache: 'pip'
         
     - name: Install dependencies
       run: |
@@ -40,7 +40,7 @@ jobs:
         echo "OS: ${{ matrix.os }}" >> build_info.txt
         
     - name: Convert PNG to ICO (if icon.png exists)
-      shell: pwsh  # 使用 PowerShell 而不是 CMD
+      shell: pwsh
       run: |
         if (Test-Path "icon.png") {
           python -c "
@@ -67,26 +67,28 @@ jobs:
           Write-Host "⚠️ No icon.png found, building without custom icon"
         }
         
-    - name: Build AutoClicker (Single File)
+    - name: Build AutoClicker (Single File - Windowed)
       shell: cmd
       run: |
+        set PY_VERSION=${{ matrix.python-version }}
         if exist "icon.ico" (
           echo Building with custom icon...
-          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Windows" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.5_%PY_VERSION%_Windows" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." AutoClicker_2.5.py
         ) else (
           echo Building without custom icon...
-          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Windows" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          pyinstaller --onefile --windowed --noconfirm --clean --name "AutoClicker_v2.5_%PY_VERSION%_Windows" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." AutoClicker_2.5.py
         )
           
-    - name: Build AutoClicker (Console Version)
+    - name: Build AutoClicker (Single File - Console)
       shell: cmd
       run: |
+        set PY_VERSION=${{ matrix.python-version }}
         if exist "icon.ico" (
           echo Building with custom icon...
-          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Console" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.5_%PY_VERSION%_Console" --icon=icon.ico --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." AutoClicker_2.5.py
         ) else (
           echo Building without custom icon...
-          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.4_%PYTHON_VERSION%_Console" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." autoclicker.py
+          pyinstaller --onefile --console --noconfirm --clean --name "AutoClicker_v2.5_%PY_VERSION%_Console" --hidden-import=pystray._win32 --hidden-import=PIL._imaging --hidden-import=PIL._imagingft --hidden-import=keyboard._winkeyboard --hidden-import=keyboard._nixkeyboard --add-data "build_info.txt;." AutoClicker_2.5.py
         )
           
     - name: Create release assets
@@ -94,7 +96,7 @@ jobs:
       run: |
         mkdir release_assets
         copy dist\*.exe release_assets\
-        echo "AutoClicker v2.4" > release_assets\README.txt
+        echo "AutoClicker v2.5" > release_assets\README.txt
         echo "================" >> release_assets\README.txt
         echo. >> release_assets\README.txt
         echo "Build Info:" >> release_assets\README.txt
@@ -111,6 +113,8 @@ jobs:
         echo "- Global hotkeys support" >> release_assets\README.txt
         echo "- System tray integration" >> release_assets\README.txt
         echo "- Safety detection" >> release_assets\README.txt
+        echo "- GitHub update checking" >> release_assets\README.txt
+        echo "- Window management" >> release_assets\README.txt
         
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -127,13 +131,14 @@ jobs:
       with:
         files: release_assets/*
         body: |
-          AutoClicker v2.4 Release
+          AutoClicker v2.5 Release
           
           ### New Features:
-          - Per-point independent click count and interval settings
-          - Enhanced safety detection mechanism
+          - GitHub update checking system
+          - Window management and auto-switching
+          - Enhanced safety detection with adjustable threshold
+          - Modern UI with glass morphism effect
           - About dialog with project information
-          - Custom application icon support
           
           ### Features:
           - Multi-point auto clicking with independent settings
@@ -141,6 +146,8 @@ jobs:
           - System tray integration
           - Safety movement detection
           - Theme support (Light/Dark)
+          - Import/Export configuration
+          - Click statistics and reporting
           
           ### Build Information:
           - Python: ${{ matrix.python-version }}
