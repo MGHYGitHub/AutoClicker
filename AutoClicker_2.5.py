@@ -76,7 +76,7 @@ except Exception:
 CONFIG_FILE = "click_points.json"
 LOG_FILE = "autoclicker_log.txt"
 CLICK_REPORT = "click_log.txt"
-VERSION = "2.5.1"  # 更新版本号
+VERSION = "2.5.3"  # 更新版本号
 # If you have a URL to check updates, set it here.
 # For safety, by default it's empty; update_check won't run if empty.
 # UPDATE_CHECK_URL = "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json"  # e.g. "https://example.com/autoclicker/version.json"
@@ -333,11 +333,16 @@ class AutoClickerApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"高级自动连点器 {VERSION}")
-        self.root.geometry("1100x750")
-        self.root.minsize(1000, 650)
+        self.root.geometry("1200x800")
+        self.root.minsize(1100, 700)
 
+        # 设置窗口图标
+        self.setup_icons()
         # Setup modern styles
         ModernStyles.setup_styles()
+
+        # 初始化任务设置窗口 - 这行要移到前面！
+        self.settings_window = TaskSettingsWindow(self.root, self)
 
         # Apply initial styling to root
         self.root.configure(bg=ModernStyles.LIGHT_THEME["bg"])
@@ -453,7 +458,10 @@ class AutoClickerApp:
         file_menu.add_command(label="退出", command=self.on_exit)
         menubar.add_cascade(label="文件", menu=file_menu)
 
+        # 添加任务设置菜单
         settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu.add_command(label="任务设置", command=self.settings_window.show)
+        settings_menu.add_separator()
         settings_menu.add_command(
             label="主题: 浅色", command=lambda: self.set_theme("light")
         )
@@ -464,10 +472,10 @@ class AutoClickerApp:
 
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="使用说明", command=self.show_help)
-        help_menu.add_command(
-            label="GitHub更新帮助", command=self.show_github_update_help
-        )  # 新增这一行
-        help_menu.add_command(label="关于", command=self.show_about)
+        # help_menu.add_command(
+        #     label="GitHub更新帮助", command=self.show_github_update_help
+        # )
+        # help_menu.add_command(label="关于", command=self.show_about)
         help_menu.add_separator()
         help_menu.add_command(label="打开日志文件", command=self.open_log_file)
         help_menu.add_command(label="检查更新", command=self.manual_check_update)
@@ -478,7 +486,7 @@ class AutoClickerApp:
     # ---------------- UI: main layout ----------------
     def create_ui(self):
         # Main container with modern styling
-        main_container = GlassFrame(self.root, blur_color="#ffffff")
+        main_container = GlassFrame(self.root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         main_container.apply_glass_effect(self.theme_var.get())
 
@@ -496,17 +504,33 @@ class AutoClickerApp:
         )
         title_label.pack(side=tk.LEFT, pady=10)
 
-        # 使用Notebook实现标签页
-        self.notebook = ttk.Notebook(main_container, style="Modern.TNotebook")
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        # 添加任务设置按钮到标题栏
+        settings_btn = ModernButton(
+            header_frame,
+            text="任务设置",
+            command=self.settings_window.show,
+            button_type="primary",
+        )
+        settings_btn.pack(side=tk.RIGHT, padx=5)
+        settings_btn.apply_theme(self.theme_var.get())
 
-        # 主任务标签页
-        self.main_task_frame = GlassFrame(self.notebook)
-        self.notebook.add(self.main_task_frame, text="主任务")
-        self.main_task_frame.apply_glass_effect(self.theme_var.get())
+        # 创建左右分栏布局
+        content_frame = tk.Frame(
+            main_container, bg=ModernStyles.get_theme(self.theme_var.get())["bg"]
+        )
+        content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 构建主任务标签页的内容
-        self.create_main_task_ui()
+        # 左侧：点位管理
+        left_frame = GlassFrame(content_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        left_frame.apply_glass_effect(self.theme_var.get())
+        self.create_points_management_ui(left_frame)
+
+        # 右侧：控制按钮和进度日志
+        right_frame = GlassFrame(content_frame)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        right_frame.apply_glass_effect(self.theme_var.get())
+        self.create_control_progress_ui(right_frame)
 
         # Status bar
         self.status_bar = tk.Label(
@@ -522,31 +546,415 @@ class AutoClickerApp:
         # Apply initial theme
         self.apply_theme()
 
-        # 在创建完UI后绑定组合框事件
-        if hasattr(self, "window_combo"):
-            self.window_combo.bind("<<ComboboxSelected>>", self.on_window_combo_select)
+    def create_points_management_ui(self, parent):
+        """创建点位管理界面"""
+        # 坐标获取区域
+        coord_frame = GlassFrame(parent)
+        coord_frame.pack(fill=tk.X, padx=4, pady=4)
+        coord_frame.apply_glass_effect(self.theme_var.get())
+
+        # 标题
+        coord_title = tk.Label(
+            coord_frame,
+            text="坐标获取 & 点位管理",
+            font=("Segoe UI", 12, "bold"),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        coord_title.pack(anchor="w", pady=(8, 12))
+
+        instr = tk.Label(
+            coord_frame,
+            text='点击"开始捕获"后移动到目标位置，按 F2 记录坐标（支持全局）。双击列表项可编辑。',
+            wraplength=600,
+            font=("Segoe UI", 9),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text_light"],
+        )
+        instr.pack(fill=tk.X, pady=(0, 12))
+
+        # 鼠标键设置和捕获按钮放在同一行
+        top_row = tk.Frame(
+            coord_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        top_row.pack(fill=tk.X, pady=4)
+
+        # 鼠标键设置
+        mb_frame = tk.Frame(
+            top_row, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        mb_frame.pack(side=tk.LEFT)
+        tk.Label(
+            mb_frame,
+            text="默认鼠标键:",
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        ).pack(side=tk.LEFT)
+        self.default_button_var = tk.StringVar(value="left")
+        mb_combo = ttk.Combobox(
+            mb_frame,
+            textvariable=self.default_button_var,
+            values=["left", "right", "middle"],
+            state="readonly",
+            width=8,
+            style="Modern.TCombobox",
+        )
+        mb_combo.pack(side=tk.LEFT, padx=6)
+        mb_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda e: self.add_progress_text(
+                f"默认鼠标键设置为 {self.default_button_var.get()}"
+            ),
+        )
+
+        # 捕获按钮
+        btn_frame = tk.Frame(
+            top_row, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        btn_frame.pack(side=tk.RIGHT)
+        self.coord_btn = ModernButton(
+            btn_frame,
+            text="开始获取坐标 (F2)",
+            command=self.start_coord_capture,
+            button_type="primary",
+        )
+        self.coord_btn.pack(side=tk.LEFT)
+        self.coord_btn.apply_theme(self.theme_var.get())
+
+        self.stop_capture_btn = ModernButton(
+            btn_frame,
+            text="停止获取坐标",
+            state=tk.DISABLED,
+            command=self.stop_coord_capture,
+            button_type="secondary",
+        )
+        self.stop_capture_btn.pack(side=tk.LEFT, padx=6)
+        self.stop_capture_btn.apply_theme(self.theme_var.get())
+
+        # 坐标预览
+        coord_preview_frame = tk.Frame(
+            coord_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        coord_preview_frame.pack(fill=tk.X, pady=8)
+        self.current_coord_label = tk.Label(
+            coord_preview_frame,
+            text="当前坐标: (0,0)",
+            font=("Segoe UI", 10),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        self.current_coord_label.pack(side=tk.LEFT)
+        self.coord_status = tk.Label(
+            coord_preview_frame,
+            text="捕获未启动",
+            fg=ModernStyles.get_theme(self.theme_var.get())["danger"],
+            font=("Segoe UI", 10),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+        )
+        self.coord_status.pack(side=tk.RIGHT)
+
+        # 点位列表区域
+        points_frame = GlassFrame(parent)
+        points_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        points_frame.apply_glass_effect(self.theme_var.get())
+
+        # 标题
+        points_title = tk.Label(
+            points_frame,
+            text="点位列表（双击编辑）",
+            font=("Segoe UI", 12, "bold"),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        points_title.pack(anchor="w", pady=(8, 12))
+
+        # 主内容区域：列表在左，按钮在右
+        content_frame = tk.Frame(
+            points_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        content_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 列表区域（占据主要空间）
+        list_frame = tk.Frame(
+            content_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.points_listbox = tk.Listbox(
+            list_frame,
+            font=("Consolas", 9),
+            activestyle="none",
+            bg=ModernStyles.get_theme(self.theme_var.get())["input_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+            selectbackground=ModernStyles.get_theme(self.theme_var.get())["accent"],
+            relief="flat",
+            borderwidth=1,
+        )
+        self.points_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.points_listbox.bind("<Double-1>", self.edit_selected_point)
+
+        list_scrollbar = tk.Scrollbar(list_frame, command=self.points_listbox.yview)
+        list_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.points_listbox.config(yscrollcommand=list_scrollbar.set)
+
+        # 按钮区域（右侧竖向排列）
+        button_frame = tk.Frame(
+            content_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        button_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(8, 0))
+
+        # 按钮分组：操作按钮和移动按钮
+        btn_width = 12
+
+        # 主要操作按钮
+        op_buttons = [
+            ("添加当前坐标", self.add_current_point, "primary"),
+            ("删除选中", self.delete_selected_point, "danger"),
+            ("清空所有", self.clear_all_points, "warning"),
+        ]
+
+        for text, command, btn_type in op_buttons:
+            btn = ModernButton(
+                button_frame,
+                text=text,
+                command=command,
+                button_type=btn_type,
+                width=btn_width,
+            )
+            btn.pack(pady=4, fill=tk.X)
+            btn.apply_theme(self.theme_var.get())
+
+        # 分隔线
+        separator = ttk.Separator(button_frame, orient="horizontal")
+        separator.pack(fill=tk.X, pady=8)
+
+        # 移动和重命名按钮
+        move_buttons = [
+            ("上移", lambda: self.move_selected(-1), "success"),
+            ("下移", lambda: self.move_selected(1), "success"),
+            ("重命名", self.rename_selected_point, "secondary"),
+        ]
+
+        for text, command, btn_type in move_buttons:
+            btn = ModernButton(
+                button_frame,
+                text=text,
+                command=command,
+                button_type=btn_type,
+                width=btn_width,
+            )
+            btn.pack(pady=4, fill=tk.X)
+            btn.apply_theme(self.theme_var.get())
+
+    def create_control_progress_ui(self, parent):
+        """创建控制按钮和进度日志界面"""
+        # 控制按钮区域
+        control_frame = GlassFrame(parent)
+        control_frame.pack(fill=tk.X, padx=4, pady=4)
+        control_frame.apply_glass_effect(self.theme_var.get())
+
+        # 标题
+        control_title = tk.Label(
+            control_frame,
+            text="任务控制",
+            font=("Segoe UI", 12, "bold"),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        control_title.pack(anchor="w", pady=(8, 12))
+
+        # 控制按钮
+        ctrl_btn_frame = tk.Frame(
+            control_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        ctrl_btn_frame.pack(fill=tk.X, pady=(0, 8))
+
+        self.start_btn = ModernButton(
+            ctrl_btn_frame,
+            text="启动任务 (F3)",
+            command=self.start_task,
+            button_type="success",
+            height=2,
+            font=("Segoe UI", 11, "bold"),
+        )
+        self.start_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        self.start_btn.apply_theme(self.theme_var.get())
+
+        self.pause_btn = ModernButton(
+            ctrl_btn_frame,
+            text="暂停 (F4)",
+            command=self.toggle_pause,
+            button_type="warning",
+            state=tk.DISABLED,
+            width=10,
+        )
+        self.pause_btn.pack(side=tk.LEFT, padx=2)
+        self.pause_btn.apply_theme(self.theme_var.get())
+
+        self.stop_btn = ModernButton(
+            ctrl_btn_frame,
+            text="停止",
+            command=self.stop_task,
+            button_type="danger",
+            state=tk.DISABLED,
+            width=8,
+        )
+        self.stop_btn.pack(side=tk.LEFT, padx=2)
+        self.stop_btn.apply_theme(self.theme_var.get())
+
+        self.tray_btn = ModernButton(
+            ctrl_btn_frame,
+            text="托盘",
+            command=self.minimize_to_tray,
+            button_type="secondary",
+            width=6,
+        )
+        self.tray_btn.pack(side=tk.LEFT, padx=2)
+        self.tray_btn.apply_theme(self.theme_var.get())
+
+        # 进度和日志区域
+        progress_frame = GlassFrame(parent)
+        progress_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        progress_frame.apply_glass_effect(self.theme_var.get())
+
+        # 标题
+        progress_title = tk.Label(
+            progress_frame,
+            text="执行进度与日志",
+            font=("Segoe UI", 12, "bold"),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        progress_title.pack(anchor="w", pady=(8, 12))
+
+        # 当前任务信息
+        task_frame = tk.Frame(
+            progress_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        task_frame.pack(fill=tk.X, pady=(0, 8))
+        self.current_task_label = tk.Label(
+            task_frame,
+            text="当前任务: 无",
+            anchor=tk.W,
+            justify=tk.LEFT,
+            font=("Segoe UI", 9),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+        )
+        self.current_task_label.pack(fill=tk.X)
+
+        # 进度条
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.progress_bar = ttk.Progressbar(
+            progress_frame,
+            variable=self.progress_var,
+            maximum=100,
+            style="Modern.Horizontal.TProgressbar",
+        )
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+
+        # 统计信息
+        stats_frame = tk.Frame(
+            progress_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        stats_frame.pack(fill=tk.X, pady=(0, 8))
+        self.stats_label = tk.Label(
+            stats_frame,
+            text=self._stats_text(),
+            anchor=tk.W,
+            justify=tk.LEFT,
+            fg=ModernStyles.get_theme(self.theme_var.get())["text_light"],
+            font=("Segoe UI", 9),
+            bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"],
+        )
+        self.stats_label.pack(fill=tk.X)
+
+        # 日志文本框
+        log_frame = tk.Frame(
+            progress_frame, bg=ModernStyles.get_theme(self.theme_var.get())["card_bg"]
+        )
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.progress_details = tk.Text(
+            log_frame,
+            height=12,
+            state=tk.DISABLED,
+            font=("Consolas", 9),
+            bg=ModernStyles.get_theme(self.theme_var.get())["input_bg"],
+            fg=ModernStyles.get_theme(self.theme_var.get())["text"],
+            relief="flat",
+            borderwidth=1,
+            padx=8,
+            pady=8,
+        )
+        self.progress_details.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        log_scrollbar = tk.Scrollbar(log_frame, command=self.progress_details.yview)
+        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.progress_details.config(yscrollcommand=log_scrollbar.set)
 
     def create_main_task_ui(self):
-        """创建主任务界面"""
-        # 左右分栏布局
-        left = GlassFrame(self.main_task_frame)
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
-        left.apply_glass_effect(self.theme_var.get())
+        """创建主任务界面 - 完整的滚动条解决方案"""
+        # 创建主框架
+        main_frame = tk.Frame(self.main_task_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-        right = GlassFrame(self.main_task_frame)
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 0))
-        right.apply_glass_effect(self.theme_var.get())
+        # 创建滚动条
+        scrollbar = tk.Scrollbar(main_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 左侧：坐标获取和点位管理
-        self.create_left_panel(left)
+        # 创建画布
+        canvas = tk.Canvas(
+            main_frame,
+            yscrollcommand=scrollbar.set,
+            bg=ModernStyles.get_theme(self.theme_var.get())["bg"],
+        )
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # 右侧：任务设置和日志
-        self.create_right_panel(right)
+        scrollbar.config(command=canvas.yview)
+
+        # 创建可滚动的内部框架
+        scrollable_frame = GlassFrame(canvas)
+        scrollable_frame_id = canvas.create_window(
+            (0, 0), window=scrollable_frame, anchor="nw"
+        )
+
+        def configure_scroll_region(event):
+            # 更新滚动区域
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def configure_canvas_width(event):
+            # 当画布大小改变时，调整内部框架的宽度
+            canvas.itemconfig(scrollable_frame_id, width=event.width)
+
+        scrollable_frame.bind("<Configure>", configure_scroll_region)
+        canvas.bind("<Configure>", configure_canvas_width)
+
+        # 应用主题
+        scrollable_frame.apply_glass_effect(self.theme_var.get())
+
+        # 创建内容（使用水平分栏）
+        self.create_scrollable_content(scrollable_frame)
+
+    def create_scrollable_content(self, parent):
+        """在可滚动框架中创建内容"""
+        # 使用水平分栏
+        left_frame = GlassFrame(parent)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        left_frame.apply_glass_effect(self.theme_var.get())
+
+        right_frame = GlassFrame(parent)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        right_frame.apply_glass_effect(self.theme_var.get())
+
+        # 创建内容
+        self.create_left_panel(left_frame)
+        self.create_right_panel(right_frame)
 
     def create_left_panel(self, parent):
         # 坐标获取区域
         coord_frame = GlassFrame(parent)
-        coord_frame.pack(fill=tk.X, padx=8, pady=8)
+        coord_frame.pack(fill=tk.X, padx=4, pady=4)
         coord_frame.apply_glass_effect(self.theme_var.get())
 
         # 标题
@@ -748,7 +1156,7 @@ class AutoClickerApp:
     def create_right_panel(self, parent):
         # 设置区域
         settings = GlassFrame(parent)
-        settings.pack(fill=tk.X, padx=8, pady=8)
+        settings.pack(fill=tk.X, padx=4, pady=4)
         settings.apply_glass_effect(self.theme_var.get())
 
         # 标题
@@ -1084,6 +1492,9 @@ class AutoClickerApp:
         self.theme_var.set(name)
         self.apply_theme()
         self.add_progress_text(f"主题切换为：{name}")
+        # 同时更新设置窗口的主题
+        if hasattr(self, "settings_window") and self.settings_window.window:
+            self.settings_window.apply_theme()
 
     def apply_theme(self):
         theme = self.theme_var.get()
@@ -2534,34 +2945,63 @@ class AutoClickerApp:
         self.hide_window_to_tray()
 
     def hide_window_to_tray(self):
-        # create icon image
-        img = Image.new("RGB", (64, 64), color=(30, 144, 255))
-        d = ImageDraw.Draw(img)
-        d.ellipse((10, 10, 54, 54), fill="white")
-        d.text((18, 18), "AC", fill="black")
-        menu = Menu(
-            MenuItem("打开主窗口", lambda icon, item: self.show_from_tray()),
-            MenuItem("开始任务", lambda icon, item: self.start_task()),
-            MenuItem("暂停/继续", lambda icon, item: self.toggle_pause()),
-            MenuItem("停止任务", lambda icon, item: self.stop_task()),
-            MenuItem("退出", lambda icon, item: self.tray_exit()),
-        )
-        self.tray_icon = Icon("AutoClicker", img, f"AutoClicker {VERSION}", menu)
-        # withdraw window
-        self.root.withdraw()
+        """隐藏窗口到托盘 - 使用自定义图标"""
+        try:
+            # 创建托盘图标图像
+            img = None
 
-        # run tray icon in separate thread
-        def tray_run():
-            try:
-                self.tray_icon.run()
-            except Exception as e:
-                log(f"托盘图标运行异常: {e}")
+            # 尝试使用自定义图标
+            if hasattr(self, "icon_dir") and self.icon_dir:
+                icon_sizes = [64, 32, 48, 128, 256, 16]
+                for size in icon_sizes:
+                    icon_path = os.path.join(self.icon_dir, f"{size}.png")
+                    if os.path.exists(icon_path):
+                        try:
+                            img = Image.open(icon_path)
+                            print(f"使用托盘图标: {icon_path}")
+                            break
+                        except Exception as e:
+                            print(f"加载托盘图标 {icon_path} 失败: {e}")
+                            continue
 
-        self.tray_thread = threading.Thread(target=tray_run, daemon=True)
-        self.tray_thread.start()
-        self.tray_running = True
-        self.add_progress_text("已最小化到托盘（后台运行）")
-        log("最小化到托盘")
+            # 如果自定义图标加载失败，创建默认图标
+            if img is None:
+                print("使用默认托盘图标")
+                img = Image.new("RGB", (64, 64), color=(30, 144, 255))
+                d = ImageDraw.Draw(img)
+                d.ellipse((10, 10, 54, 54), fill="white")
+                d.text((18, 18), "AC", fill="black")
+
+            # 创建托盘菜单
+            menu = Menu(
+                MenuItem("打开主窗口", lambda icon, item: self.show_from_tray()),
+                MenuItem("开始任务", lambda icon, item: self.start_task()),
+                MenuItem("暂停/继续", lambda icon, item: self.toggle_pause()),
+                MenuItem("停止任务", lambda icon, item: self.stop_task()),
+                MenuItem("退出", lambda icon, item: self.tray_exit()),
+            )
+
+            self.tray_icon = Icon("AutoClicker", img, f"AutoClicker {VERSION}", menu)
+
+            # 隐藏窗口
+            self.root.withdraw()
+
+            # 在单独线程中运行托盘图标
+            def tray_run():
+                try:
+                    self.tray_icon.run()
+                except Exception as e:
+                    log(f"托盘图标运行异常: {e}")
+
+            self.tray_thread = threading.Thread(target=tray_run, daemon=True)
+            self.tray_thread.start()
+            self.tray_running = True
+            self.add_progress_text("已最小化到托盘（后台运行）")
+            log("最小化到托盘")
+
+        except Exception as e:
+            print(f"创建托盘图标失败: {e}")
+            messagebox.showerror("错误", f"托盘图标创建失败: {e}")
 
     def show_from_tray(self):
         try:
@@ -2802,7 +3242,7 @@ class AutoClickerApp:
     def is_newer_version(self, remote, current):
         """增强版版本号比较"""
         try:
-            # 处理版本号中的非数字字符（如 "v2.5.1" -> "2.5.1"）
+            # 处理版本号中的非数字字符（如 "v2.5.3" -> "2.5.3"）
             remote = remote.lstrip("vV")
             current = current.lstrip("vV")
 
@@ -2896,7 +3336,7 @@ class AutoClickerApp:
     2. 版本文件要求：
     在 GitHub 仓库根目录创建 version.json 文件，内容如下：
     {{
-        "version": "2.5.1",
+        "version": "2.5.3",
         "download_url": "https://github.com/.../下载链接",
         "changelog": "修复了...",
         "release_notes": "详细更新说明"
@@ -2907,7 +3347,7 @@ class AutoClickerApp:
     https://raw.githubusercontent.com/用户名/仓库名/分支名/version.json
 
     4. 版本号比较：
-    - 支持语义化版本号 (如 2.5.1)
+    - 支持语义化版本号 (如 2.5.3)
     - 会自动比较远程版本是否比当前版本新
 
     当前配置状态: 已配置多个备用源
@@ -2923,7 +3363,7 @@ class AutoClickerApp:
     def is_newer_version(self, remote, current):
         """增强版版本号比较"""
         try:
-            # 处理版本号中的非数字字符（如 "v2.5.1" -> "2.5.1"）
+            # 处理版本号中的非数字字符（如 "v2.5.3" -> "2.5.3"）
             remote = remote.lstrip("vV")
             current = current.lstrip("vV")
 
@@ -3721,7 +4161,7 @@ class AutoClickerApp:
     2. 版本文件要求：
     在 GitHub 仓库根目录创建 version.json 文件，内容如下：
     {{
-        "version": "2.5.1",
+        "version": "2.5.3",
         "download_url": "https://github.com/.../下载链接",
         "changelog": "修复了...",
         "release_notes": "详细更新说明"
@@ -3732,7 +4172,7 @@ class AutoClickerApp:
     https://raw.githubusercontent.com/用户名/仓库名/分支名/version.json
 
     4. 版本号比较：
-    - 支持语义化版本号 (如 2.5.1)
+    - 支持语义化版本号 (如 2.5.3)
     - 会自动比较远程版本是否比当前版本新
 
     当前配置状态: 已配置
@@ -3744,6 +4184,97 @@ class AutoClickerApp:
         )
 
         messagebox.showinfo("GitHub 更新配置说明", help_text)
+
+    def setup_icons(self):
+        """设置图标 - 单文件exe专用"""
+        try:
+            # 判断运行环境
+            if getattr(sys, "frozen", False):
+                # 打包后的环境
+                base_path = sys._MEIPASS
+                icon_dir = os.path.join(base_path, "ICON")
+            else:
+                # 开发环境
+                icon_dir = "ICON"
+
+            print(f"图标目录: {icon_dir}")
+
+            if os.path.exists(icon_dir):
+                # 设置窗口图标
+                self.set_window_icon(icon_dir)
+                self.icon_dir = icon_dir
+                print("✅ 图标加载成功")
+            else:
+                print("⚠ 图标目录不存在，使用默认图标")
+                self.icon_dir = None
+
+        except Exception as e:
+            print(f"❌ 图标设置失败: {e}")
+
+    def set_window_icon(self, icon_dir):
+        """设置窗口图标"""
+        try:
+            # 按优先级尝试不同尺寸
+            sizes = [256, 128, 64, 48, 32, 16]
+
+            for size in sizes:
+                icon_path = os.path.join(icon_dir, f"{size}.png")
+                if os.path.exists(icon_path):
+                    try:
+                        from PIL import Image, ImageTk
+
+                        img = Image.open(icon_path)
+                        photo = ImageTk.PhotoImage(img)
+
+                        # 设置窗口图标
+                        self.root.iconphoto(True, photo)
+
+                        # 保存引用
+                        if not hasattr(self, "icon_images"):
+                            self.icon_images = []
+                        self.icon_images.append(photo)
+
+                        print(f"✅ 使用图标: {size}x{size}")
+                        break
+                    except Exception as e:
+                        print(f"⚠ 加载图标失败 {size}x{size}: {e}")
+                        continue
+        except Exception as e:
+            print(f"❌ 窗口图标设置失败: {e}")
+
+    def set_window_icon(self, icon_dir):
+        """设置窗口图标"""
+        try:
+            # 尝试不同尺寸的图标
+            icon_sizes = [64, 48, 32, 128, 256, 16]
+
+            for size in icon_sizes:
+                icon_path = os.path.join(icon_dir, f"{size}.png")
+                print(f"尝试加载图标: {icon_path}")
+                if os.path.exists(icon_path):
+                    try:
+                        # 使用PIL加载图像
+                        from PIL import Image, ImageTk
+
+                        img = Image.open(icon_path)
+                        # 转换为PhotoImage
+                        photo = ImageTk.PhotoImage(img)
+                        # 设置窗口图标
+                        self.root.iconphoto(True, photo)
+                        # 保存引用防止垃圾回收
+                        if not hasattr(self, "icon_images"):
+                            self.icon_images = []
+                        self.icon_images.append(photo)
+                        print(f"成功设置窗口图标: {icon_path}")
+                        return
+                    except Exception as e:
+                        print(f"加载窗口图标 {icon_path} 失败: {e}")
+                        continue
+
+            print("未找到可用的图标文件")
+
+        except Exception as e:
+            print(f"设置窗口图标失败: {e}")
 
 
 # ---------------- Dialogs for adding/editing points ----------------
@@ -4395,6 +4926,401 @@ class EditPointDialog:
 
     def on_cancel(self):
         self.top.destroy()
+
+
+# ------------- Task Settings Window -------------
+class TaskSettingsWindow:
+    def __init__(self, parent, main_app):
+        self.parent = parent
+        self.main_app = main_app
+        self.window = None
+
+    def show(self):
+        if self.window and self.window.winfo_exists():
+            self.window.lift()
+            return
+
+        self.window = tk.Toplevel(self.parent)
+        self.window.title("任务设置")
+        self.window.geometry("600x700")
+        self.window.minsize(550, 650)
+
+        # 应用主题
+        self.apply_theme()
+
+        # 创建界面
+        self.create_ui()
+
+        # 居中显示
+        self.center_window()
+
+        # 绑定关闭事件
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_close(self):
+        if self.window:
+            self.window.destroy()
+            self.window = None
+
+    def center_window(self):
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.window.winfo_screenheight() // 2) - (height // 2)
+        self.window.geometry(f"+{x}+{y}")
+
+    def apply_theme(self):
+        theme = self.main_app.theme_var.get()
+        colors = ModernStyles.get_theme(theme)
+        self.window.configure(bg=colors["bg"])
+
+    def create_ui(self):
+        # 主容器
+        main_container = GlassFrame(self.window)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        main_container.apply_glass_effect(self.main_app.theme_var.get())
+
+        # 标题
+        header_frame = GlassFrame(main_container)
+        header_frame.pack(fill=tk.X, pady=(0, 15))
+        header_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        title_label = tk.Label(
+            header_frame,
+            text="任务设置",
+            font=("Segoe UI", 16, "bold"),
+            bg=ModernStyles.get_theme(self.main_app.theme_var.get())["card_bg"],
+            fg=ModernStyles.get_theme(self.main_app.theme_var.get())["accent"],
+        )
+        title_label.pack(side=tk.LEFT, pady=10)
+
+        # 创建滚动区域
+        self.create_scrollable_content(main_container)
+
+    def create_scrollable_content(self, parent):
+        # 创建滚动框架
+        canvas = tk.Canvas(
+            parent, bg=ModernStyles.get_theme(self.main_app.theme_var.get())["bg"]
+        )
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = GlassFrame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # 应用主题
+        scrollable_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        # 创建设置内容
+        self.create_settings_content(scrollable_frame)
+
+    def create_settings_content(self, parent):
+        colors = ModernStyles.get_theme(self.main_app.theme_var.get())
+
+        # 基本设置区域
+        basic_frame = GlassFrame(parent)
+        basic_frame.pack(fill=tk.X, padx=10, pady=10)
+        basic_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        basic_title = tk.Label(
+            basic_frame,
+            text="基本设置",
+            font=("Segoe UI", 12, "bold"),
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        )
+        basic_title.pack(anchor="w", pady=(0, 10))
+
+        # 默认点击次数
+        click_count_frame = tk.Frame(basic_frame, bg=colors["card_bg"])
+        click_count_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            click_count_frame,
+            text="默认点击次数:",
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            click_count_frame,
+            from_=1,
+            to=999,
+            textvariable=self.main_app.click_count_var,
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 默认延时
+        delay_frame = tk.Frame(basic_frame, bg=colors["card_bg"])
+        delay_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            delay_frame, text="默认延时(秒):", bg=colors["card_bg"], fg=colors["text"]
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            delay_frame,
+            from_=0.0,
+            to=60.0,
+            increment=0.1,
+            textvariable=self.main_app.base_delay_var,
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 循环次数
+        loop_frame = tk.Frame(basic_frame, bg=colors["card_bg"])
+        loop_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            loop_frame, text="循环次数:", bg=colors["card_bg"], fg=colors["text"]
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            loop_frame, from_=1, to=99999, textvariable=self.main_app.loop_var, width=8
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 随机设置区域
+        random_frame = GlassFrame(parent)
+        random_frame.pack(fill=tk.X, padx=10, pady=10)
+        random_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        random_title = tk.Label(
+            random_frame,
+            text="随机设置",
+            font=("Segoe UI", 12, "bold"),
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        )
+        random_title.pack(anchor="w", pady=(0, 10))
+
+        # 随机偏移
+        offset_frame = tk.Frame(random_frame, bg=colors["card_bg"])
+        offset_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            offset_frame,
+            text="随机偏移(px ±):",
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            offset_frame,
+            from_=0,
+            to=500,
+            textvariable=self.main_app.random_offset_var,
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 随机延时
+        rand_delay_frame = tk.Frame(random_frame, bg=colors["card_bg"])
+        rand_delay_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            rand_delay_frame,
+            text="随机延时(s ±):",
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            rand_delay_frame,
+            from_=0.0,
+            to=10.0,
+            increment=0.05,
+            textvariable=self.main_app.random_delay_var,
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 启动设置区域
+        startup_frame = GlassFrame(parent)
+        startup_frame.pack(fill=tk.X, padx=10, pady=10)
+        startup_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        startup_title = tk.Label(
+            startup_frame,
+            text="启动设置",
+            font=("Segoe UI", 12, "bold"),
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        )
+        startup_title.pack(anchor="w", pady=(0, 10))
+
+        # 启动倒计时
+        countdown_frame = tk.Frame(startup_frame, bg=colors["card_bg"])
+        countdown_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            countdown_frame,
+            text="启动倒计时(秒):",
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        tk.Spinbox(
+            countdown_frame,
+            from_=0,
+            to=60,
+            textvariable=self.main_app.countdown_var,
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 任务结束动作
+        action_frame = tk.Frame(startup_frame, bg=colors["card_bg"])
+        action_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            action_frame, text="任务结束动作:", bg=colors["card_bg"], fg=colors["text"]
+        ).pack(side=tk.LEFT)
+        ttk.Combobox(
+            action_frame,
+            textvariable=self.main_app.auto_action_var,
+            values=["none", "sound"],
+            state="readonly",
+            width=8,
+        ).pack(side=tk.LEFT, padx=5)
+
+        # 选项区域
+        options_frame = GlassFrame(parent)
+        options_frame.pack(fill=tk.X, padx=10, pady=10)
+        options_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        options_title = tk.Label(
+            options_frame,
+            text="选项",
+            font=("Segoe UI", 12, "bold"),
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        )
+        options_title.pack(anchor="w", pady=(0, 10))
+
+        # 启动前确认
+        tk.Checkbutton(
+            options_frame,
+            text="启动前确认",
+            variable=self.main_app.show_confirmation_var,
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(anchor="w", pady=2)
+
+        # 调试模式
+        tk.Checkbutton(
+            options_frame,
+            text="调试模式",
+            variable=self.main_app.debug_mode_var,
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(anchor="w", pady=2)
+
+        # 安全检测
+        safety_frame = tk.Frame(options_frame, bg=colors["card_bg"])
+        safety_frame.pack(fill=tk.X, pady=2)
+        tk.Checkbutton(
+            safety_frame,
+            text="安全检测",
+            variable=self.main_app.enable_safety_check,
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            safety_frame, text="阈值:", bg=colors["card_bg"], fg=colors["text"]
+        ).pack(side=tk.LEFT, padx=(10, 2))
+        tk.Spinbox(
+            safety_frame,
+            from_=50,
+            to=1000,
+            textvariable=self.main_app.safety_threshold_var,
+            width=5,
+        ).pack(side=tk.LEFT)
+
+        # 窗口管理区域
+        window_frame = GlassFrame(parent)
+        window_frame.pack(fill=tk.X, padx=10, pady=10)
+        window_frame.apply_glass_effect(self.main_app.theme_var.get())
+
+        window_title = tk.Label(
+            window_frame,
+            text="窗口管理",
+            font=("Segoe UI", 12, "bold"),
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        )
+        window_title.pack(anchor="w", pady=(0, 10))
+
+        # 窗口选择
+        window_select_frame = tk.Frame(window_frame, bg=colors["card_bg"])
+        window_select_frame.pack(fill=tk.X, pady=5)
+        tk.Label(
+            window_select_frame,
+            text="目标窗口:",
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+        self.main_app.window_combo = ttk.Combobox(
+            window_select_frame, textvariable=self.main_app.window_title_var, width=30
+        )
+        self.main_app.window_combo.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # 窗口操作按钮
+        window_btn_frame = tk.Frame(window_frame, bg=colors["card_bg"])
+        window_btn_frame.pack(fill=tk.X, pady=5)
+
+        refresh_btn = ModernButton(
+            window_btn_frame,
+            text="刷新窗口列表",
+            command=self.main_app.refresh_window_list,
+            button_type="primary",
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=2)
+        refresh_btn.apply_theme(self.main_app.theme_var.get())
+
+        capture_btn = ModernButton(
+            window_btn_frame,
+            text="获取当前窗口",
+            command=self.main_app.capture_current_window,
+            button_type="primary",
+        )
+        capture_btn.pack(side=tk.LEFT, padx=2)
+        capture_btn.apply_theme(self.main_app.theme_var.get())
+
+        test_btn = ModernButton(
+            window_btn_frame,
+            text="测试切换",
+            command=self.main_app.test_window_switch,
+            button_type="success",
+        )
+        test_btn.pack(side=tk.LEFT, padx=2)
+        test_btn.apply_theme(self.main_app.theme_var.get())
+
+        clear_btn = ModernButton(
+            window_btn_frame,
+            text="清除窗口",
+            command=self.main_app.clear_target_window,
+            button_type="danger",
+        )
+        clear_btn.pack(side=tk.LEFT, padx=2)
+        clear_btn.apply_theme(self.main_app.theme_var.get())
+
+        # 自动切换选项
+        auto_switch_frame = tk.Frame(window_frame, bg=colors["card_bg"])
+        auto_switch_frame.pack(fill=tk.X, pady=5)
+        tk.Checkbutton(
+            auto_switch_frame,
+            text="自动切换窗口",
+            variable=self.main_app.auto_switch_window,
+            bg=colors["card_bg"],
+            fg=colors["text"],
+        ).pack(side=tk.LEFT)
+
+        # 窗口状态显示
+        self.main_app.window_status = tk.Label(
+            window_frame,
+            text="未选择目标窗口",
+            fg=colors["danger"],
+            font=("Segoe UI", 9),
+            bg=colors["card_bg"],
+        )
+        self.main_app.window_status.pack(fill=tk.X, pady=2)
+
+        # 绑定组合框事件
+        if hasattr(self.main_app, "window_combo"):
+            self.main_app.window_combo.bind(
+                "<<ComboboxSelected>>", self.main_app.on_window_combo_select
+            )
 
 
 # ---------------- Main run ----------------
