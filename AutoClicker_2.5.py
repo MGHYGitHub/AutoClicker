@@ -76,7 +76,7 @@ except Exception:
 CONFIG_FILE = "click_points.json"
 LOG_FILE = "autoclicker_log.txt"
 CLICK_REPORT = "click_log.txt"
-VERSION = "2.5.0"  # 更新版本号
+VERSION = "2.5.1"  # 更新版本号
 # If you have a URL to check updates, set it here.
 # For safety, by default it's empty; update_check won't run if empty.
 # UPDATE_CHECK_URL = "https://raw.githubusercontent.com/MGHYGitHub/AutoClicker/main/version.json"  # e.g. "https://example.com/autoclicker/version.json"
